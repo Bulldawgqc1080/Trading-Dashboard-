@@ -142,18 +142,51 @@ function getFomcDays() {
   return Math.ceil((next - now) / (1000 * 60 * 60 * 24));
 }
 
+async function fetchSingleQuote(symbol) {
+  try {
+    const period2 = Math.floor(Date.now() / 1000);
+    const period1 = period2 - (5 * 24 * 3600);
+    const u = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=1d&includePrePost=false`;
+    const data = await httpsGet(u);
+    const result = data?.chart?.result?.[0];
+    if (!result) return null;
+    const meta = result.meta || {};
+    const closes = result.indicators?.quote?.[0]?.close || [];
+    const validCloses = closes.filter(c => c !== null && !isNaN(c));
+    const price = meta.regularMarketPrice || validCloses[validCloses.length - 1] || 0;
+    const prev = meta.chartPreviousClose || meta.previousClose || validCloses[validCloses.length - 2] || price;
+    const change = price - prev;
+    const changePct = prev > 0 ? (change / prev) * 100 : 0;
+    return {
+      price: Math.round(price * 100) / 100,
+      change: Math.round(change * 100) / 100,
+      changePct: Math.round(changePct * 100) / 100,
+      closes: validCloses
+    };
+  } catch(e) {
+    return null;
+  }
+}
+
 async function buildMarketData() {
-  const [quotes, spyHistory, vixHistory] = await Promise.all([
-    fetchYahooQuotes(SYMBOLS),
+  const sectorSyms = ['XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLU','XLB','XLRE','XLC'];
+
+  const [spyData, qqqData, vixData, dxyData, tnxData, spyHistory, vixHistory, ...sectorResults] = await Promise.all([
+    fetchSingleQuote('SPY'),
+    fetchSingleQuote('QQQ'),
+    fetchSingleQuote('%5EVIX'),
+    fetchSingleQuote('DX-Y.NYB'),
+    fetchSingleQuote('%5ETNX'),
     fetchYahooHistory('SPY', 220),
-    fetchYahooHistory('%5EVIX', 30)
+    fetchYahooHistory('%5EVIX', 30),
+    ...sectorSyms.map(s => fetchSingleQuote(s))
   ]);
 
-  const spy = quotes['SPY'] || {};
-  const qqq = quotes['QQQ'] || {};
-  const vixQ = quotes['^VIX'] || {};
-  const dxy = quotes['DX-Y.NYB'] || {};
-  const tnx = quotes['^TNX'] || {};
+  const spy = spyData || {};
+  const qqq = qqqData || {};
+  const vixQ = vixData || {};
+  const dxy = dxyData || {};
+  const tnx = tnxData || {};
 
   const spy20 = calcSMA(spyHistory, 20);
   const spy50 = calcSMA(spyHistory, 50);
@@ -165,18 +198,17 @@ async function buildMarketData() {
   const qqqPrice = qqq.price || 0;
   const qqq50 = qqq.ma50 || 999;
 
-  const sectorSyms = ['XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLU','XLB','XLRE','XLC'];
   const sectorNames = {
     XLK:'Technology', XLF:'Financials', XLE:'Energy', XLV:'Health Care',
     XLI:'Industrials', XLY:'Cons Discret', XLP:'Cons Staples', XLU:'Utilities',
     XLB:'Materials', XLRE:'Real Estate', XLC:'Comm Services'
   };
-  const sectors = sectorSyms.map(sym => ({
+  const sectors = sectorSyms.map((sym, i) => ({
     sym,
     name: sectorNames[sym],
-    price: Math.round((quotes[sym]?.price || 0) * 100) / 100,
-    chg: Math.round((quotes[sym]?.changePct || 0) * 100) / 100,
-    score: Math.min(100, Math.max(0, Math.round(50 + (quotes[sym]?.changePct || 0) * 10)))
+    price: sectorResults[i]?.price || 0,
+    chg: sectorResults[i]?.changePct || 0,
+    score: Math.min(100, Math.max(0, Math.round(50 + (sectorResults[i]?.changePct || 0) * 10)))
   })).sort((a, b) => b.chg - a.chg);
 
   const sectorChanges = sectors.map(s => s.chg);
