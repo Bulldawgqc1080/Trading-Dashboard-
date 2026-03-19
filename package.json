@@ -1,0 +1,12 @@
+{
+  "name": "sibt",
+  "version": "1.0.0",
+  "description": "Should I Be Trading? — Market environment dashboard for swing traders",
+  "scripts": {
+    "start": "node api/server.js",
+    "dev": "node api/server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
