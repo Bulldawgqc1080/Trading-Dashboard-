@@ -436,7 +436,7 @@ async function buildMarketData() {
 }
 
 
-const WATCHLIST = ['TSLA', 'NVDA', 'PYPL'];
+const WATCHLIST = ['TSLA', 'NVDA', 'PYPL', 'MSTR'];
 let watchlistCache = { data: null, ts: 0 };
 const WATCHLIST_CACHE_TTL = 60000; // 1 min cache
 
