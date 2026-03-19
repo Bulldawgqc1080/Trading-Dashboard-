@@ -162,6 +162,50 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
 @media(max-width:900px){.bottom-grid{grid-template-columns:1fr;}.panels-grid{grid-template-columns:repeat(3,1fr);}}
 @media(max-width:650px){.hero-grid{grid-template-columns:1fr;}.panels-grid{grid-template-columns:repeat(2,1fr);}.topbar-right .ts{display:none;}.topbar-right .mode-toggle{display:none;}.s-name{display:none;}}
 @media(max-width:420px){.panels-grid{grid-template-columns:1fr 1fr;}.main{padding:8px;}.topbar{padding:5px 8px;}}
+
+/* TABS */
+.tab-bar{display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--bg2);padding:0 14px;}
+.tab-btn{background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text2);font-family:var(--mono);font-size:11px;padding:10px 16px;cursor:pointer;margin-bottom:-1px;letter-spacing:0.5px;}
+.tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
+.tab-btn:hover:not(.active){color:var(--text);}
+.tab-content{display:none;}
+.tab-content.active{display:block;}
+
+/* WATCHLIST */
+.watchlist-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;padding:12px;}
+.stock-card{background:var(--bg2);border:1px solid var(--border);padding:14px;display:flex;flex-direction:column;gap:10px;}
+.stock-card.ACTIONABLE{border-left:3px solid var(--green);}
+.stock-card.WATCH{border-left:3px solid var(--amber);}
+.stock-card.AVOID{border-left:3px solid var(--red);}
+.sc-header{display:flex;align-items:center;justify-content:space-between;}
+.sc-sym{font-size:18px;font-weight:700;color:var(--text);}
+.sc-price{font-size:14px;font-weight:600;color:var(--text);}
+.sc-chg{font-size:11px;}
+.sc-verdict{font-size:10px;font-weight:700;letter-spacing:2px;padding:3px 10px;border-radius:2px;}
+.sc-verdict.ACTIONABLE{color:var(--green);background:rgba(0,230,118,.1);border:1px solid rgba(0,230,118,.3);}
+.sc-verdict.WATCH{color:var(--amber);background:rgba(255,171,64,.1);border:1px solid rgba(255,171,64,.3);}
+.sc-verdict.AVOID{color:var(--red);background:rgba(255,82,82,.1);border:1px solid rgba(255,82,82,.3);}
+.sc-scores{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.sc-score-box{background:var(--bg3);padding:8px 10px;border-radius:2px;display:flex;flex-direction:column;gap:3px;}
+.sc-score-lbl{font-size:9px;color:var(--text3);letter-spacing:1px;}
+.sc-score-val{font-size:18px;font-weight:700;}
+.sc-score-bar-track{height:3px;background:var(--bg4);border-radius:1px;overflow:hidden;margin-top:2px;}
+.sc-score-bar-fill{height:100%;border-radius:1px;}
+.sc-metrics{display:flex;flex-direction:column;gap:4px;}
+.sc-metric-row{display:flex;align-items:center;justify-content:space-between;}
+.sc-metric-k{font-size:10px;color:var(--text3);}
+.sc-metric-v{font-size:11px;font-weight:500;}
+.sc-reasons{display:flex;flex-wrap:wrap;gap:4px;}
+.sc-reason{font-size:9px;padding:2px 6px;border-radius:2px;border:1px solid var(--border);color:var(--text2);}
+.sc-rs{display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg3);border-radius:2px;}
+.sc-rs-lbl{font-size:9px;color:var(--text3);}
+.sc-rs-val{font-size:12px;font-weight:600;}
+.sc-rs-bar{flex:1;height:4px;background:var(--bg4);border-radius:1px;overflow:hidden;position:relative;}
+.sc-rs-fill{height:100%;border-radius:1px;position:absolute;top:0;}
+.wl-loading{padding:40px;text-align:center;color:var(--text3);font-size:11px;}
+.wl-header{padding:12px 14px 0;display:flex;align-items:center;justify-content:space-between;}
+.wl-refresh{background:var(--bg3);border:1px solid var(--border2);color:var(--blue);font-family:var(--mono);font-size:10px;padding:3px 9px;cursor:pointer;border-radius:2px;}
+@media(max-width:700px){.watchlist-grid{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
@@ -182,6 +226,12 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
     </div>
   </div>
 
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('market')">MARKET</button>
+    <button class="tab-btn" onclick="switchTab('watchlist')">WATCHLIST</button>
+  </div>
+
+  <div id="tab-market" class="tab-content active">
   <div class="main">
     <div id="killSwitchArea"></div>
     <div id="alertArea"></div>
@@ -267,6 +317,19 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
           <span class="sb-total-val" id="sbTotal" style="color:var(--text);">--%</span>
         </div>
       </div>
+    </div>
+  </div>
+
+  </div> <!-- end tab-market main -->
+  </div> <!-- end tab-market -->
+
+  <div id="tab-watchlist" class="tab-content">
+    <div class="wl-header">
+      <span style="font-size:9px;color:var(--text3);letter-spacing:2px;">WATCHLIST — TSLA / NVDA / PYPL</span>
+      <button class="wl-refresh" onclick="loadWatchlist(true)">⟳ REFRESH</button>
+    </div>
+    <div class="watchlist-grid" id="watchlistGrid">
+      <div class="wl-loading">Loading stock data...</div>
     </div>
   </div>
 
@@ -655,6 +718,116 @@ function startAutoRefresh(){clearInterval(refreshTimer);refreshTimer=setInterval
 
 fetchData();startAutoRefresh();
 setInterval(function(){secondsSince++;document.getElementById('tsLabel').textContent='updated '+secondsSince+'s ago';},1000);
+
+// TAB SWITCHING
+var watchlistLoaded = false;
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+  document.querySelectorAll('.tab-content').forEach(function(t){ t.classList.remove('active'); });
+  document.querySelector('.tab-btn[onclick*="'+tab+'"]').classList.add('active');
+  document.getElementById('tab-'+tab).classList.add('active');
+  if (tab === 'watchlist' && !watchlistLoaded) { loadWatchlist(false); }
+}
+
+// WATCHLIST
+function scoreCol(s){ return s>=65?'#00e676':s>=45?'#ffab40':'#ff5252'; }
+
+function renderWatchlist(stocks) {
+  if (!stocks || stocks.length === 0) {
+    document.getElementById('watchlistGrid').innerHTML = '<div class="wl-loading">No data available — try refreshing.</div>';
+    return;
+  }
+  var html = stocks.map(function(s) {
+    var chgColor = s.changePct >= 0 ? 'var(--green)' : 'var(--red)';
+    var chgSign = s.changePct >= 0 ? '+' : '';
+    var rsColor = s.relStrength >= 0 ? '#00e676' : '#ff5252';
+    var rsSign = s.relStrength >= 0 ? '+' : '';
+    var setupCol = scoreCol(s.setupScore);
+    var momCol = scoreCol(s.momentumScore);
+    var combCol = scoreCol(s.combinedScore);
+
+    // Relative strength bar (centered, -20 to +20 range)
+    var rsBarPct = Math.min(100, Math.abs(s.relStrength) / 20 * 50);
+    var rsBarLeft = s.relStrength >= 0 ? '50%' : (50 - rsBarPct) + '%';
+
+    var metricsHtml = [
+      {k:'vs 20d MA', v:s.vs20.toUpperCase(), cls:s.vs20==='above'?'up':'dn'},
+      {k:'vs 50d MA', v:s.vs50.toUpperCase(), cls:s.vs50==='above'?'up':'dn'},
+      {k:'vs 200d MA', v:s.vs200.toUpperCase(), cls:s.vs200==='above'?'up':'dn'},
+      {k:'RSI (14d)', v:s.rsi, cls:s.rsi>50&&s.rsi<70?'up':s.rsi>=70?'warn':'fl'},
+      {k:'20d perf', v:(s.perf20d>=0?'+':'')+s.perf20d+'%', cls:s.perf20d>=0?'up':'dn'},
+    ].map(function(m){
+      return '<div class="sc-metric-row"><span class="sc-metric-k">'+m.k+'</span><span class="sc-metric-v dp-v '+m.cls+'">'+m.v+'</span></div>';
+    }).join('');
+
+    var reasonsHtml = s.reasons.map(function(r){
+      return '<span class="sc-reason">'+r+'</span>';
+    }).join('');
+
+    return '<div class="stock-card '+s.verdict+'">' +
+      '<div class="sc-header">' +
+        '<div>' +
+          '<div class="sc-sym">'+s.symbol+'</div>' +
+          '<div style="display:flex;align-items:center;gap:8px;margin-top:2px;">' +
+            '<span class="sc-price">$'+s.price.toFixed(2)+'</span>' +
+            '<span class="sc-chg" style="color:'+chgColor+'">'+chgSign+s.changePct.toFixed(2)+'%</span>' +
+          '</div>' +
+        '</div>' +
+        '<span class="sc-verdict '+s.verdict+'">'+s.verdict+'</span>' +
+      '</div>' +
+
+      '<div class="sc-scores">' +
+        '<div class="sc-score-box">' +
+          '<span class="sc-score-lbl">SETUP</span>' +
+          '<span class="sc-score-val" style="color:'+setupCol+'">'+s.setupScore+'</span>' +
+          '<div class="sc-score-bar-track"><div class="sc-score-bar-fill" style="width:'+s.setupScore+'%;background:'+setupCol+'"></div></div>' +
+        '</div>' +
+        '<div class="sc-score-box">' +
+          '<span class="sc-score-lbl">MOMENTUM</span>' +
+          '<span class="sc-score-val" style="color:'+momCol+'">'+s.momentumScore+'</span>' +
+          '<div class="sc-score-bar-track"><div class="sc-score-bar-fill" style="width:'+s.momentumScore+'%;background:'+momCol+'"></div></div>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="sc-rs">' +
+        '<span class="sc-rs-lbl">RS vs SPY (20d)</span>' +
+        '<span class="sc-rs-val" style="color:'+rsColor+'">'+rsSign+s.relStrength.toFixed(1)+'%</span>' +
+        '<div class="sc-rs-bar">' +
+          '<div style="position:absolute;top:0;left:50%;width:1px;height:100%;background:var(--border2);"></div>' +
+          '<div class="sc-rs-fill" style="width:'+rsBarPct+'%;left:'+rsBarLeft+';background:'+rsColor+';opacity:0.7;"></div>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="sc-metrics">'+metricsHtml+'</div>' +
+      '<div class="sc-reasons">'+reasonsHtml+'</div>' +
+    '</div>';
+  }).join('');
+
+  document.getElementById('watchlistGrid').innerHTML = html;
+  watchlistLoaded = true;
+}
+
+async function loadWatchlist(force) {
+  if (force) watchlistLoaded = false;
+  document.getElementById('watchlistGrid').innerHTML = '<div class="wl-loading">Fetching stock data...</div>';
+  try {
+    // Use watchlist data from market API if available
+    if (lastData && lastData.watchlist && !force) {
+      renderWatchlist(lastData.watchlist);
+      return;
+    }
+    var wlUrl = API_URL.replace('/api/market', '/api/watchlist');
+    var ctrl = new AbortController();
+    var tid = setTimeout(function(){ ctrl.abort(); }, 20000);
+    var res = await fetch(wlUrl, { signal: ctrl.signal });
+    clearTimeout(tid);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    renderWatchlist(data.stocks);
+  } catch(err) {
+    document.getElementById('watchlistGrid').innerHTML = '<div class="wl-loading" style="color:var(--red);">Failed to load: ' + err.message + '</div>';
+  }
+}
 </script>
 </body>
 </html>
