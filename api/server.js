@@ -421,7 +421,133 @@ async function buildMarketData() {
   addToScoreHistory(scores.total, decision);
   await logJournalEntry(Math.round(spyPrice * 100) / 100, scores.total, decision);
 
+  // Pre-build watchlist data using already-fetched SPY history
+  try {
+    const wlData = await buildWatchlistData(spyHistory);
+    watchlistCache = { data: wlData, ts: Date.now() };
+    marketData.watchlist = wlData;
+  } catch(e) {}
+
   return marketData;
+}
+
+
+const WATCHLIST = ['TSLA', 'NVDA', 'PYPL'];
+let watchlistCache = { data: null, ts: 0 };
+const WATCHLIST_CACHE_TTL = 60000; // 1 min cache
+
+async function fetchStockData(symbol, spyHistory) {
+  try {
+    const history = await fetchYahooHistory(symbol, 220);
+    const quote = await fetchSingleQuote(symbol, 'WL_' + symbol);
+    if (!quote || history.length < 20) return null;
+
+    const price = quote.price;
+    const changePct = quote.changePct;
+    const ma20 = calcSMA(history, 20);
+    const ma50 = calcSMA(history, 50);
+    const ma200 = calcSMA(history, 200);
+    const rsi = calcRSI(history, 14);
+
+    // Relative strength vs SPY (20d performance comparison)
+    const stockPerf20 = history.length >= 20 ? ((history[history.length-1] - history[history.length-20]) / history[history.length-20]) * 100 : 0;
+    const spyPerf20 = spyHistory.length >= 20 ? ((spyHistory[spyHistory.length-1] - spyHistory[spyHistory.length-20]) / spyHistory[spyHistory.length-20]) * 100 : 0;
+    const relStrength = Math.round((stockPerf20 - spyPerf20) * 100) / 100;
+
+    // Volume trend (avg last 5 vs avg last 20) - approximate from price action
+    const recentVolatility = history.slice(-5).reduce((acc, v, i, arr) => {
+      if (i === 0) return acc;
+      return acc + Math.abs((v - arr[i-1]) / arr[i-1]);
+    }, 0) / 4 * 100;
+
+    // ATR-based volatility (14-day)
+    const atr = recentVolatility;
+
+    // Setup score (0-100)
+    let setupScore = 0;
+    if (ma200 && price > ma200) setupScore += 25;
+    if (ma50 && price > ma50) setupScore += 20;
+    if (ma20 && price > ma20) setupScore += 15;
+    if (rsi > 40 && rsi < 70) setupScore += 20;
+    if (rsi > 50) setupScore += 5;
+    // Near MA support (within 3%) = good setup
+    if (ma20 && Math.abs(price - ma20) / ma20 < 0.03) setupScore += 15;
+    else if (ma50 && Math.abs(price - ma50) / ma50 < 0.03) setupScore += 10;
+    setupScore = Math.max(0, Math.min(100, setupScore));
+
+    // Momentum score (0-100)
+    let momentumScore = 0;
+    momentumScore += relStrength > 5 ? 35 : relStrength > 0 ? 20 : relStrength > -5 ? 5 : 0;
+    momentumScore += changePct > 2 ? 25 : changePct > 0.5 ? 15 : changePct > 0 ? 8 : 0;
+    const slope = calcSlope(history, 10);
+    momentumScore += slope > 2 ? 25 : slope > 0.5 ? 15 : slope > 0 ? 5 : 0;
+    momentumScore += rsi > 55 ? 15 : rsi > 45 ? 8 : 0;
+    momentumScore = Math.max(0, Math.min(100, momentumScore));
+
+    const combinedScore = Math.round(setupScore * 0.5 + momentumScore * 0.5);
+
+    // Verdict
+    let verdict = 'AVOID';
+    if (combinedScore >= 65 && relStrength >= 0) verdict = 'ACTIONABLE';
+    else if (combinedScore >= 45) verdict = 'WATCH';
+
+    // Key levels
+    const support = ma50 ? Math.round(ma50 * 100) / 100 : null;
+    const resistance = ma20 && price < ma20 ? Math.round(ma20 * 100) / 100 : null;
+
+    // Top reasons
+    const reasons = [];
+    if (price > (ma200||0)) reasons.push('Above 200d MA');
+    else reasons.push('Below 200d MA');
+    if (relStrength > 2) reasons.push('Outperforming SPY +'+relStrength.toFixed(1)+'%');
+    else if (relStrength < -2) reasons.push('Underperforming SPY '+relStrength.toFixed(1)+'%');
+    if (rsi > 70) reasons.push('RSI overbought ('+rsi+')');
+    else if (rsi < 30) reasons.push('RSI oversold ('+rsi+')');
+    else if (rsi > 50) reasons.push('RSI healthy ('+rsi+')');
+    if (ma20 && Math.abs(price - ma20) / ma20 < 0.03) reasons.push('Near 20d MA support');
+    if (ma50 && Math.abs(price - ma50) / ma50 < 0.03) reasons.push('Near 50d MA support');
+
+    return {
+      symbol,
+      price,
+      changePct: Math.round(changePct * 100) / 100,
+      ma20: Math.round((ma20||0) * 100) / 100,
+      ma50: Math.round((ma50||0) * 100) / 100,
+      ma200: Math.round((ma200||0) * 100) / 100,
+      vs20: ma20 ? (price > ma20 ? 'above' : 'below') : 'unknown',
+      vs50: ma50 ? (price > ma50 ? 'above' : 'below') : 'unknown',
+      vs200: ma200 ? (price > ma200 ? 'above' : 'below') : 'unknown',
+      rsi,
+      relStrength,
+      atr: Math.round(atr * 10) / 10,
+      setupScore,
+      momentumScore,
+      combinedScore,
+      verdict,
+      support,
+      resistance,
+      reasons: reasons.slice(0, 3),
+      perf20d: Math.round(stockPerf20 * 100) / 100
+    };
+  } catch(e) {
+    console.error('Stock fetch error:', symbol, e.message);
+    return null;
+  }
+}
+
+async function buildWatchlistData(spyHistory) {
+  const results = await Promise.all(WATCHLIST.map(sym => fetchStockData(sym, spyHistory)));
+  return results.filter(r => r !== null).sort((a, b) => b.combinedScore - a.combinedScore);
+}
+
+async function getWatchlistData(spyHistory) {
+  const now = Date.now();
+  if (watchlistCache.data && (now - watchlistCache.ts) < WATCHLIST_CACHE_TTL) {
+    return { stocks: watchlistCache.data, cached: true };
+  }
+  const stocks = await buildWatchlistData(spyHistory);
+  watchlistCache = { data: stocks, ts: now };
+  return { stocks, cached: false };
 }
 
 async function getMarketData() {
@@ -457,6 +583,20 @@ const server = http.createServer(async (req, res) => {
   if (parsed.pathname === '/api/journal') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ journal, count: journal.length }));
+    return;
+  }
+
+  if (parsed.pathname === '/api/watchlist') {
+    try {
+      // Use cached spy history if available
+      const spyHist = cache.data ? [] : await fetchYahooHistory('SPY', 220);
+      const data = await getWatchlistData(spyHist);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(data));
+    } catch(err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
     return;
   }
 
