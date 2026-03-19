@@ -99,7 +99,7 @@ async function fetchSingleQuote(symbol, feedKey) {
   try {
     const period2 = Math.floor(Date.now() / 1000);
     const period1 = period2 - (7 * 24 * 3600);
-    const u = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=1d&includePrePost=false`;
+    const u = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=1d&includePrePost=false&indicators=adjclose&events=div,splits`;
     const data = await httpsGet(u);
     const result = data?.chart?.result?.[0];
     if (!result) {
@@ -113,12 +113,16 @@ async function fetchSingleQuote(symbol, feedKey) {
     const prev = meta.chartPreviousClose || meta.previousClose || validCloses[validCloses.length - 2] || price;
     const change = price - prev;
     const changePct = prev > 0 ? (change / prev) * 100 : 0;
+    const ma200raw = meta.twoHundredDayAverage || meta.regularMarketDayLow || 0;
+    const ma50raw = meta.fiftyDayAverage || 0;
     feedHealth[feedKey] = { status: 'ok', ts: Date.now(), latency: Date.now()-start, price };
     return {
       price: Math.round(price * 100) / 100,
       change: Math.round(change * 100) / 100,
       changePct: Math.round(changePct * 100) / 100,
       prev: Math.round(prev * 100) / 100,
+      ma200: Math.round(ma200raw * 100) / 100,
+      ma50: Math.round(ma50raw * 100) / 100,
       closes: validCloses
     };
   } catch(e) {
@@ -436,17 +440,33 @@ const WATCHLIST = ['TSLA', 'NVDA', 'PYPL'];
 let watchlistCache = { data: null, ts: 0 };
 const WATCHLIST_CACHE_TTL = 60000; // 1 min cache
 
+async function fetchStockQuoteMAs(symbol) {
+  try {
+    const u = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}&fields=fiftyDayAverage,twoHundredDayAverage`;
+    const data = await httpsGet(u);
+    const q = data?.quoteResponse?.result?.[0];
+    if (!q) return null;
+    return {
+      ma50: Math.round((q.fiftyDayAverage || 0) * 100) / 100,
+      ma200: Math.round((q.twoHundredDayAverage || 0) * 100) / 100
+    };
+  } catch(e) { return null; }
+}
+
 async function fetchStockData(symbol, spyHistory) {
   try {
-    const history = await fetchYahooHistory(symbol, 220);
-    const quote = await fetchSingleQuote(symbol, 'WL_' + symbol);
+    const [history, quote, quoteMAs] = await Promise.all([
+      fetchYahooHistory(symbol, 400),
+      fetchSingleQuote(symbol, 'WL_' + symbol),
+      fetchStockQuoteMAs(symbol)
+    ]);
     if (!quote || history.length < 20) return null;
 
     const price = quote.price;
     const changePct = quote.changePct;
     const ma20 = calcSMA(history, 20);
-    const ma50 = calcSMA(history, 50);
-    const ma200 = calcSMA(history, 200);
+    const ma50 = calcSMA(history, 50) || (quoteMAs && quoteMAs.ma50) || null;
+    const ma200 = calcSMA(history, 200) || (quoteMAs && quoteMAs.ma200) || null;
     const rsi = calcRSI(history, 14);
 
     // Relative strength vs SPY (20d performance comparison)
@@ -589,7 +609,7 @@ const server = http.createServer(async (req, res) => {
   if (parsed.pathname === '/api/watchlist') {
     try {
       // Use cached spy history if available
-      const spyHist = cache.data ? [] : await fetchYahooHistory('SPY', 400);
+      const spyHist = cache.data ? [] : await fetchYahooHistory('SPY', 220);
       const data = await getWatchlistData(spyHist);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(data));
