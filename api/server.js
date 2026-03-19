@@ -589,7 +589,7 @@ const server = http.createServer(async (req, res) => {
   if (parsed.pathname === '/api/watchlist') {
     try {
       // Use cached spy history if available
-      const spyHist = cache.data ? [] : await fetchYahooHistory('SPY', 220);
+      const spyHist = cache.data ? [] : await fetchYahooHistory('SPY', 400);
       const data = await getWatchlistData(spyHist);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(data));
