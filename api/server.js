@@ -1,4 +1,3 @@
-
 const http = require('http');
 const https = require('https');
 const url = require('url');
@@ -39,7 +38,7 @@ function httpsGet(reqUrl) {
 }
 
 async function fetchYahooQuotes(symbols) {
-  const symStr = encodeURIComponent(symbols.join(','));
+  const symStr = symbols.join(',');
   const u = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symStr}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketPreviousClose,fiftyDayAverage,twoHundredDayAverage`;
   const data = await httpsGet(u);
   const quotes = {};
