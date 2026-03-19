@@ -1,29 +1,64 @@
 const http = require('http');
 const https = require('https');
 const url = require('url');
-const fs = require('fs');
-const path = require('path');
 
 const PORT = process.env.PORT || 3001;
 const CACHE_TTL = 30000;
-const STALE_THRESHOLD = 5 * 60 * 1000; // 5 minutes
-const JOURNAL_FILE = path.join('/tmp', 'sibt_journal.json');
+const STALE_THRESHOLD = 5 * 60 * 1000;
 
 let cache = { data: null, ts: 0 };
 let scoreHistory = [];
 let feedHealth = {};
 let journal = [];
 
-// Load journal from disk if exists
-try {
-  if (fs.existsSync(JOURNAL_FILE)) {
-    journal = JSON.parse(fs.readFileSync(JOURNAL_FILE, 'utf8'));
-  }
-} catch(e) { journal = []; }
+// Upstash Redis REST API
+const UPSTASH_URL = process.env.KV_REST_API_URL;
+const UPSTASH_TOKEN = process.env.KV_REST_API_TOKEN;
 
-function saveJournal() {
-  try { fs.writeFileSync(JOURNAL_FILE, JSON.stringify(journal)); } catch(e) {}
+function httpsGetWithAuth(reqUrl, token) {
+  return new Promise((resolve, reject) => {
+    const opts = new URL(reqUrl);
+    const options = {
+      hostname: opts.hostname,
+      path: opts.pathname + opts.search,
+      headers: { 'Authorization': 'Bearer ' + token }
+    };
+    const req = https.get(options, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => { try { resolve(JSON.parse(data)); } catch(e) { resolve(null); } });
+    });
+    req.on('error', reject);
+    req.setTimeout(5000, () => { req.destroy(); reject(new Error('KV timeout')); });
+  });
 }
+
+async function kvGet(key) {
+  if (!UPSTASH_URL || !UPSTASH_TOKEN) return null;
+  try {
+    const res = await httpsGetWithAuth(UPSTASH_URL + '/get/' + key, UPSTASH_TOKEN);
+    return res && res.result ? JSON.parse(res.result) : null;
+  } catch(e) { return null; }
+}
+
+async function kvSet(key, value) {
+  if (!UPSTASH_URL || !UPSTASH_TOKEN) return;
+  try {
+    const encoded = encodeURIComponent(JSON.stringify(value));
+    await httpsGetWithAuth(UPSTASH_URL + '/set/' + key + '/' + encoded, UPSTASH_TOKEN);
+  } catch(e) {}
+}
+
+async function loadJournal() {
+  const stored = await kvGet('sibt:journal');
+  if (stored && Array.isArray(stored)) journal = stored;
+}
+
+async function saveJournal() {
+  await kvSet('sibt:journal', journal);
+}
+
+loadJournal().catch(() => {});
 
 function httpsGet(reqUrl) {
   return new Promise((resolve, reject) => {
@@ -275,13 +310,18 @@ function calcScoresServer(d) {
     momentum: Math.round(momentum), macro: Math.round(macro), total, topReasons };
 }
 
-function logJournalEntry(spyPrice, score, decision) {
+async function logJournalEntry(spyPrice, score, decision) {
   const today = new Date().toISOString().split('T')[0];
   const exists = journal.find(j => j.date === today);
   if (!exists) {
-    journal.push({ date: today, score, decision, spyEntry: spyPrice, spyExit: null, outcome: null, ts: Date.now() });
-    if (journal.length > 90) journal = journal.slice(-90);
-    saveJournal();
+    // Try to load latest from KV first in case another instance wrote
+    const stored = await kvGet('sibt:journal');
+    if (stored && Array.isArray(stored)) journal = stored;
+    if (!journal.find(j => j.date === today)) {
+      journal.push({ date: today, score, decision, spyEntry: spyPrice, spyExit: null, outcome: null, ts: Date.now() });
+      if (journal.length > 90) journal = journal.slice(-90);
+      await saveJournal();
+    }
   }
 }
 
@@ -379,7 +419,7 @@ async function buildMarketData() {
 
   const decision = scores.total >= 80 ? 'YES' : scores.total >= 60 ? 'CAUTION' : 'NO';
   addToScoreHistory(scores.total, decision);
-  logJournalEntry(Math.round(spyPrice * 100) / 100, scores.total, decision);
+  await logJournalEntry(Math.round(spyPrice * 100) / 100, scores.total, decision);
 
   return marketData;
 }
