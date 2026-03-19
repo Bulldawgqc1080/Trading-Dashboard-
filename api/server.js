@@ -174,11 +174,11 @@ async function buildMarketData() {
   const [spyData, qqqData, vixData, dxyData, tnxData, spyHistory, vixHistory, ...sectorResults] = await Promise.all([
     fetchSingleQuote('SPY'),
     fetchSingleQuote('QQQ'),
-    fetchSingleQuote('%5EVIX'),
+    fetchSingleQuote('^VIX'),
     fetchSingleQuote('DX-Y.NYB'),
-    fetchSingleQuote('%5ETNX'),
+    fetchSingleQuote('^TNX'),
     fetchYahooHistory('SPY', 220),
-    fetchYahooHistory('%5EVIX', 30),
+    fetchYahooHistory('^VIX', 30),
     ...sectorSyms.map(s => fetchSingleQuote(s))
   ]);
 
