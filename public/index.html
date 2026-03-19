@@ -39,33 +39,36 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
 .mkt-status.closed{color:var(--text3);background:var(--bg3);border:1px solid var(--border);}
 .live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:blink 2s ease-in-out infinite;flex-shrink:0;}
 .live-dot.err{background:var(--red);animation:none;}
+.live-dot.stale{background:var(--amber);animation:none;}
 @keyframes blink{0%,100%{opacity:1;}50%{opacity:.3;}}
 .live-lbl{font-size:10px;font-weight:600;letter-spacing:1px;}
 .live-lbl.ok{color:var(--green);}
 .live-lbl.err{color:var(--red);}
+.live-lbl.stale{color:var(--amber);}
 .ts{font-size:10px;color:var(--text3);}
 .mode-toggle{display:flex;background:var(--bg);border:1px solid var(--border);border-radius:2px;overflow:hidden;}
-.mode-btn{background:transparent;border:none;color:var(--text2);font-family:var(--mono);font-size:10px;padding:3px 8px;cursor:pointer;transition:all .15s;}
+.mode-btn{background:transparent;border:none;color:var(--text2);font-family:var(--mono);font-size:10px;padding:3px 8px;cursor:pointer;}
 .mode-btn.active{background:var(--bg4);color:var(--blue);}
 .refresh-btn{background:var(--bg3);border:1px solid var(--border2);color:var(--blue);font-family:var(--mono);font-size:10px;padding:3px 9px;cursor:pointer;border-radius:2px;}
 .refresh-btn:hover{background:var(--bg4);}
 
-/* MAIN */
-.main{padding:12px;display:flex;flex-direction:column;gap:10px;}
-
 /* BANNERS */
+.main{padding:12px;display:flex;flex-direction:column;gap:10px;}
 .alert-banner{background:#140f00;border:1px solid #554400;border-left:3px solid var(--amber);padding:7px 12px;display:flex;align-items:center;gap:8px;font-size:11px;color:var(--amber);}
 .err-banner{background:#0f0505;border:1px solid #440000;border-left:3px solid var(--red);padding:7px 12px;font-size:11px;color:var(--red);}
-.mkt-closed-banner{background:#080d12;border:1px solid var(--border);border-left:3px solid var(--text3);padding:7px 12px;display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);}
+.mkt-closed-banner{background:#080d12;border:1px solid var(--border);border-left:3px solid var(--text3);padding:7px 12px;font-size:11px;color:var(--text2);}
+.kill-switch{background:#0f0505;border:2px solid var(--red);padding:10px 14px;font-size:12px;color:var(--red);text-align:center;letter-spacing:1px;font-weight:600;}
+.feed-stale{background:#140800;border:1px solid #553300;border-left:3px solid var(--amber);padding:6px 12px;font-size:10px;color:var(--amber);}
 
 /* HERO */
-.hero-grid{display:grid;grid-template-columns:210px 1fr;gap:10px;}
+.hero-grid{display:grid;grid-template-columns:220px 1fr;gap:10px;}
 .hero-panel{background:var(--bg2);border:1px solid var(--border);padding:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;}
 .should-label{font-size:9px;color:var(--text3);letter-spacing:2.5px;}
 .decision-badge{font-size:26px;font-weight:700;letter-spacing:4px;padding:6px 18px;border-radius:2px;transition:all .3s;}
 .decision-badge.YES{color:var(--green);border:2px solid var(--green);background:rgba(0,230,118,.08);}
 .decision-badge.CAUTION{color:var(--amber);border:2px solid var(--amber);background:rgba(255,171,64,.08);}
 .decision-badge.NO{color:var(--red);border:2px solid var(--red);background:rgba(255,82,82,.08);}
+.decision-badge.NOTR{color:var(--text3);border:2px solid var(--text3);background:rgba(74,106,122,.08);font-size:18px;letter-spacing:2px;}
 .spy-price{font-size:11px;color:var(--text2);}
 .spy-price span{color:var(--text);font-weight:600;}
 .ring-wrap{position:relative;width:96px;height:96px;}
@@ -74,6 +77,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
 .ring-num{font-size:22px;font-weight:700;}
 .ring-pct{font-size:10px;color:var(--text3);}
 .score-lbl{font-size:9px;color:var(--text2);letter-spacing:1px;}
+.no-trade-label{font-size:9px;color:var(--text3);padding:2px 8px;border:1px solid var(--border2);border-radius:2px;}
 .divider{height:1px;width:85%;background:var(--border);}
 .exec-wrap{display:flex;flex-direction:column;align-items:center;gap:3px;width:100%;}
 .exec-lbl{font-size:9px;color:var(--text3);letter-spacing:1px;}
@@ -82,12 +86,17 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
 .exec-track{flex:1;height:5px;background:var(--bg4);border-radius:1px;overflow:hidden;}
 .exec-fill{height:100%;border-radius:1px;transition:width .5s;}
 
+/* SUMMARY */
 .summary-panel{background:var(--bg2);border:1px solid var(--border);padding:14px 16px;display:flex;flex-direction:column;gap:10px;}
-.panel-hdr{display:flex;align-items:center;justify-content:space-between;}
+.panel-hdr{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px;}
 .panel-title{font-size:9px;color:var(--text3);letter-spacing:2px;}
 .mode-tag{font-size:9px;color:var(--text3);padding:2px 6px;border:1px solid var(--border);border-radius:1px;}
-.summary-body{font-size:12px;color:var(--text);line-height:1.75;border-left:2px solid var(--blue2);padding-left:10px;flex:1;}
+.summary-body{font-size:12px;color:var(--text);line-height:1.75;border-left:2px solid var(--blue2);padding-left:10px;}
 .directive{font-size:11px;color:var(--text2);padding:6px 10px;border:1px solid var(--border);background:var(--bg3);border-radius:2px;}
+.top-reasons{display:flex;flex-wrap:wrap;gap:5px;}
+.reason-tag{font-size:9px;padding:2px 7px;border-radius:2px;border:1px solid;}
+.reason-tag.pos{color:var(--green);border-color:rgba(0,230,118,.3);background:rgba(0,230,118,.06);}
+.reason-tag.neg{color:var(--red);border-color:rgba(255,82,82,.3);background:rgba(255,82,82,.06);}
 .source-row{font-size:9px;color:var(--text3);display:flex;gap:12px;flex-wrap:wrap;}
 
 /* DATA PANELS */
@@ -111,11 +120,20 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
 .dp-bar-fill{height:100%;border-radius:1px;transition:width .5s;}
 .dp-score-lbl{font-size:9px;color:var(--text3);}
 
-/* BOTTOM GRID */
+/* FEED HEALTH */
+.feed-panel{background:var(--bg2);border:1px solid var(--border);padding:10px 12px;}
+.feed-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px;margin-top:8px;}
+.feed-item{display:flex;flex-direction:column;gap:2px;padding:5px 7px;border:1px solid var(--border);border-radius:2px;}
+.feed-sym{font-size:9px;color:var(--text2);font-weight:600;}
+.feed-stat{font-size:8px;}
+.feed-stat.ok{color:var(--green);}
+.feed-stat.err{color:var(--red);}
+.feed-stat.stale{color:var(--amber);}
+.feed-lat{font-size:8px;color:var(--text3);}
+
+/* BOTTOM */
 .bottom-grid{display:grid;grid-template-columns:1fr 320px;gap:10px;}
 .sector-panel,.score-panel,.history-panel{background:var(--bg2);border:1px solid var(--border);padding:12px;}
-
-/* SECTOR */
 .sector-rows{display:flex;flex-direction:column;gap:4px;margin-top:10px;}
 .sector-row{display:flex;align-items:center;gap:7px;}
 .s-sym{width:38px;font-size:10px;color:var(--text2);flex-shrink:0;font-weight:500;}
@@ -123,8 +141,6 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
 .s-fill{position:absolute;top:0;left:0;height:100%;border-radius:1px;}
 .s-pct{position:absolute;right:5px;top:50%;transform:translateY(-50%);font-size:9px;font-weight:600;}
 .s-name{width:85px;font-size:9px;color:var(--text3);flex-shrink:0;text-align:right;}
-
-/* SCORE BREAKDOWN */
 .sb-rows{display:flex;flex-direction:column;gap:7px;margin-top:10px;}
 .sb-row{display:flex;flex-direction:column;gap:3px;}
 .sb-hdr{display:flex;align-items:center;justify-content:space-between;}
@@ -136,42 +152,16 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
 .sb-total-row{border-top:1px solid var(--border);margin-top:8px;padding-top:8px;display:flex;align-items:center;justify-content:space-between;}
 .sb-total-lbl{font-size:11px;color:var(--text2);}
 .sb-total-val{font-size:18px;font-weight:700;}
-
-/* SCORE HISTORY */
-.history-panel{margin-top:0;}
+.history-panel{margin-top:10px;}
 .history-chart{margin-top:10px;position:relative;height:120px;}
-.history-canvas{width:100%;height:100%;}
-.history-empty{font-size:10px;color:var(--text3);padding:20px 0;text-align:center;}
-
-/* SKELETON */
 .skeleton{background:var(--bg4);border-radius:2px;animation:shimmer 1.5s ease-in-out infinite;}
 @keyframes shimmer{0%,100%{opacity:.6;}50%{opacity:1;}}
-
-/* FOOTER */
 .footer{padding:8px 14px;font-size:9px;color:var(--text3);border-top:1px solid var(--border);display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;}
 
-/* RESPONSIVE */
-@media(max-width:1200px){
-  .panels-grid{grid-template-columns:repeat(3,1fr);}
-  .bottom-grid{grid-template-columns:1fr 280px;}
-}
-@media(max-width:900px){
-  .bottom-grid{grid-template-columns:1fr;}
-  .panels-grid{grid-template-columns:repeat(3,1fr);}
-}
-@media(max-width:650px){
-  .hero-grid{grid-template-columns:1fr;}
-  .panels-grid{grid-template-columns:repeat(2,1fr);}
-  .topbar-right .ts{display:none;}
-  .topbar-right .mode-toggle{display:none;}
-  .s-name{display:none;}
-  .logo{font-size:11px;}
-}
-@media(max-width:420px){
-  .panels-grid{grid-template-columns:1fr 1fr;}
-  .main{padding:8px;}
-  .topbar{padding:5px 8px;}
-}
+@media(max-width:1200px){.panels-grid{grid-template-columns:repeat(3,1fr);}.bottom-grid{grid-template-columns:1fr 280px;}}
+@media(max-width:900px){.bottom-grid{grid-template-columns:1fr;}.panels-grid{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:650px){.hero-grid{grid-template-columns:1fr;}.panels-grid{grid-template-columns:repeat(2,1fr);}.topbar-right .ts{display:none;}.topbar-right .mode-toggle{display:none;}.s-name{display:none;}}
+@media(max-width:420px){.panels-grid{grid-template-columns:1fr 1fr;}.main{padding:8px;}.topbar{padding:5px 8px;}}
 </style>
 </head>
 <body>
@@ -193,8 +183,10 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
   </div>
 
   <div class="main">
+    <div id="killSwitchArea"></div>
     <div id="alertArea"></div>
     <div id="mktClosedArea"></div>
+    <div id="feedStaleArea"></div>
     <div id="errArea"></div>
 
     <div class="hero-grid">
@@ -209,7 +201,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
             <div class="ring-pct">%</div>
           </div>
         </div>
-        <div class="score-lbl">market quality</div>
+        <div id="scoreZoneLabel" class="score-lbl">market quality</div>
         <div class="divider"></div>
         <div class="exec-wrap">
           <div class="exec-lbl">execution window</div>
@@ -227,6 +219,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
           <div class="mode-tag" id="modeTag">SWING MODE</div>
         </div>
         <div class="summary-body" id="summaryBody">Fetching live market data...</div>
+        <div id="topReasonsArea" class="top-reasons"></div>
         <div class="directive" id="directiveBody">—</div>
         <div class="source-row">
           <span id="srcLabel">source: —</span>
@@ -244,20 +237,26 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
       <div class="dp"><div class="skeleton" style="height:80px;"></div></div>
     </div>
 
+    <div class="feed-panel">
+      <div class="panel-hdr">
+        <div class="panel-title">feed health</div>
+        <span style="font-size:9px;color:var(--text3);" id="feedQualityLabel">checking...</span>
+      </div>
+      <div class="feed-grid" id="feedGrid"></div>
+    </div>
+
     <div class="bottom-grid">
       <div>
         <div class="sector-panel">
           <div class="panel-title">sector performance — 1d change</div>
           <div class="sector-rows" id="sectorRows"><div class="skeleton" style="height:140px;margin-top:10px;"></div></div>
         </div>
-        <div class="history-panel" style="margin-top:10px;">
+        <div class="history-panel">
           <div class="panel-hdr">
             <div class="panel-title">score history — 30 day</div>
             <span style="font-size:9px;color:var(--text3);" id="historyNote">building...</span>
           </div>
-          <div class="history-chart">
-            <canvas id="historyCanvas"></canvas>
-          </div>
+          <div class="history-chart"><canvas id="historyCanvas"></canvas></div>
         </div>
       </div>
       <div class="score-panel">
@@ -272,27 +271,30 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
   </div>
 
   <div class="footer">
-    <span>SIBT v1.1 — For educational purposes only. Not financial advice.</span>
+    <span>SIBT v1.2 — Educational only. Not financial advice.</span>
     <span id="footerTime"></span>
   </div>
 </div>
 
 <script>
-const API_URL = (window.location.hostname==='localhost'||window.location.hostname==='127.0.0.1')
-  ? 'http://localhost:3001/api/market' : '/api/market';
+const API_URL=(window.location.hostname==='localhost'||window.location.hostname==='127.0.0.1')
+  ?'http://localhost:3001/api/market':'/api/market';
 
-var mode='swing', lastData=null, secondsSince=0, refreshTimer=null, isLoading=false;
+var mode='swing',lastData=null,secondsSince=0,refreshTimer=null,isLoading=false;
 var localHistory=[];
 
+const NO_TRADE_LOW=45,NO_TRADE_HIGH=55;
+
 function getMockData(){
-  return {
-    spy:{price:542.18,chg:0.71},qqq:{price:462.40,chg:1.12},
+  return{spy:{price:542.18,chg:0.71},qqq:{price:462.40,chg:1.12},
     vix:{price:18.4,chg:-4.2},dxy:{price:103.8,chg:-0.22},tnx:{price:4.38,chg:0.03},
     spyVs20:'above',spyVs50:'above',spyVs200:'above',qqqVs50:'above',
     spyRSI:58,regime:'uptrend',vixLevel:18.4,vixSlope:-0.8,vixPercentile:28,putCallRatio:0.82,
     pctAbove20:62,pctAbove50:58,pctAbove200:54,adRatio:1.42,nasdaqHL:84,mcclellan:45,
     tenYrLevel:4.38,tenYrTrend:'rising',dxyTrend:'falling',fedStance:'neutral',fomcDays:5,fomc72hr:false,
-    marketOpen:true,marketStatus:'MARKET OPEN',scoreHistory:[],
+    marketOpen:true,marketStatus:'MARKET OPEN',scoreHistory:[],feedHealth:{},
+    feedQuality:{quality:'good',label:'ALL FEEDS OK',errors:[],stale:[]},
+    topReasons:['Confirmed uptrend','Tech leading','Dollar falling'],
     sectors:[
       {sym:'XLK',name:'Technology',chg:1.42},{sym:'XLI',name:'Industrials',chg:0.94},
       {sym:'XLF',name:'Financials',chg:0.71},{sym:'XLC',name:'Comm Services',chg:0.63},
@@ -300,224 +302,229 @@ function getMockData(){
       {sym:'XLV',name:'Health Care',chg:-0.12},{sym:'XLP',name:'Cons Staples',chg:-0.34},
       {sym:'XLRE',name:'Real Estate',chg:-0.52},{sym:'XLU',name:'Utilities',chg:-0.81},
       {sym:'XLE',name:'Energy',chg:-1.23}
-    ],
-    dataSource:'Demo Data',lastUpdated:new Date().toISOString()
-  };
+    ],dataSource:'Demo Data',lastUpdated:new Date().toISOString()};
 }
 
 function calcScores(d,m){
   var tight=m==='day'?6:0;
   var vix=d.vixLevel<15?90:d.vixLevel<18?80:d.vixLevel<20?72:d.vixLevel<23?58:d.vixLevel<27?42:d.vixLevel<32?28:12;
-  if(d.vixSlope<-0.5)vix=Math.min(100,vix+8);
-  if(d.vixSlope>0.5)vix=Math.max(0,vix-8);
-  if(d.vixPercentile<30)vix=Math.min(100,vix+5);
-  if(d.vixPercentile>70)vix=Math.max(0,vix-10);
+  if(d.vixSlope<-0.5)vix=Math.min(100,vix+8);if(d.vixSlope>0.5)vix=Math.max(0,vix-8);
+  if(d.vixPercentile<30)vix=Math.min(100,vix+5);if(d.vixPercentile>70)vix=Math.max(0,vix-10);
   vix=Math.max(0,vix-tight);
-
   var trend=0;
-  if(d.spyVs200==='above')trend+=30;
-  if(d.spyVs50==='above')trend+=25;
-  if(d.spyVs20==='above')trend+=20;
-  if(d.qqqVs50==='above')trend+=15;
+  if(d.spyVs200==='above')trend+=30;if(d.spyVs50==='above')trend+=25;
+  if(d.spyVs20==='above')trend+=20;if(d.qqqVs50==='above')trend+=15;
   if(d.regime==='uptrend')trend+=10;
   if(d.spyRSI>30&&d.spyRSI<70)trend=Math.min(100,trend+8);
-  if(d.spyRSI>=75)trend=Math.max(0,trend-12);
-  if(d.spyRSI<=25)trend=Math.max(0,trend-18);
+  if(d.spyRSI>=75)trend=Math.max(0,trend-12);if(d.spyRSI<=25)trend=Math.max(0,trend-18);
   trend=Math.max(0,trend-tight);
-
   var breadth=0;
-  breadth+=Math.min(35,d.pctAbove50*0.6);
-  breadth+=Math.min(25,d.pctAbove200*0.45);
+  breadth+=Math.min(35,d.pctAbove50*0.6);breadth+=Math.min(25,d.pctAbove200*0.45);
   breadth+=d.adRatio>1.3?20:d.adRatio>1.0?10:-10;
-  if(d.nasdaqHL>70)breadth+=10;
-  if(d.mcclellan>20)breadth+=10;
-  else if(d.mcclellan<-20)breadth-=10;
+  if(d.nasdaqHL>70)breadth+=10;if(d.mcclellan>20)breadth+=10;else if(d.mcclellan<-20)breadth-=10;
   breadth=Math.max(0,Math.min(100,breadth-tight));
-
   var upS=d.sectors.filter(function(s){return s.chg>0;}).length;
   var top3=(d.sectors[0].chg+d.sectors[1].chg+d.sectors[2].chg)/3;
   var btm3=(d.sectors[8].chg+d.sectors[9].chg+d.sectors[10].chg)/3;
   var spread=top3-btm3;
-  var momentum=Math.min(50,upS*5);
-  momentum+=Math.min(35,spread*8);
+  var momentum=Math.min(50,upS*5)+Math.min(35,spread*8);
   if(d.sectors[0].sym==='XLK'||d.sectors[1].sym==='XLK')momentum+=10;
   if(d.sectors[0].sym==='XLU'||d.sectors[0].sym==='XLP')momentum-=12;
   momentum=Math.max(0,Math.min(100,momentum-tight));
-
   var macro=d.tenYrLevel<4.0?35:d.tenYrLevel<4.3?25:d.tenYrLevel<4.7?15:d.tenYrLevel<5.2?5:-10;
   macro+=d.tenYrTrend==='falling'?18:d.tenYrTrend==='rising'?-12:0;
   macro+=d.dxyTrend==='falling'?15:d.dxyTrend==='rising'?-5:0;
   macro+=d.fedStance==='dovish'?20:d.fedStance==='neutral'?5:-18;
-  if(d.fomc72hr)macro-=18;
-  macro=Math.max(0,Math.min(100,macro));
-
+  if(d.fomc72hr)macro-=18;macro=Math.max(0,Math.min(100,macro));
   var total=Math.round(vix*0.25+momentum*0.25+trend*0.20+breadth*0.20+macro*0.10);
-
   var exec=0;
-  exec+=d.pctAbove20>60?28:d.pctAbove20>45?15:0;
-  exec+=d.adRatio>1.3?28:d.adRatio>1.0?14:0;
-  exec+=d.sectors[0].chg>1.0?22:d.sectors[0].chg>0.3?12:0;
-  exec+=spread>1.8?22:spread>0.5?12:0;
+  exec+=d.pctAbove20>60?28:d.pctAbove20>45?15:0;exec+=d.adRatio>1.3?28:d.adRatio>1.0?14:0;
+  exec+=d.sectors[0].chg>1.0?22:d.sectors[0].chg>0.3?12:0;exec+=spread>1.8?22:spread>0.5?12:0;
   exec=Math.max(0,Math.min(100,exec));
-
   return{vix:Math.max(0,Math.round(vix)),trend:Math.max(0,Math.round(trend)),
     breadth:Math.max(0,Math.round(breadth)),momentum:Math.max(0,Math.round(momentum)),
     macro:Math.max(0,Math.round(macro)),total:total,exec:exec};
 }
 
-function getDecision(score,m){
+function getDecision(score,m,dataQuality){
+  if(dataQuality==='bad')return'NO';
   var y=m==='day'?75:80,c=m==='day'?55:60;
+  if(score>=NO_TRADE_LOW&&score<=NO_TRADE_HIGH)return'NOTR';
   return score>=y?'YES':score>=c?'CAUTION':'NO';
 }
+
 function scoreColor(s){return s>=70?'#00e676':s>=50?'#ffab40':'#ff5252';}
 
 function buildSummary(d,scores,decision,m){
-  var vixD=d.vixLevel<18?'Low volatility (VIX '+d.vixLevel+', '+d.vixPercentile+'th %ile)':d.vixLevel<24?'Moderate volatility (VIX '+d.vixLevel+')':'Elevated volatility (VIX '+d.vixLevel+' — risk-off)';
-  var trendD=d.regime==='uptrend'?'SPY in confirmed uptrend — above 20d, 50d, and 200d MAs':d.regime==='downtrend'?'SPY in downtrend — below key moving averages':'SPY in choppy range — mixed MA structure (RSI '+d.spyRSI+')';
-  var breadthD=d.pctAbove50>60?'Breadth healthy — '+d.pctAbove50+'% of stocks above 50d MA':d.pctAbove50>45?'Breadth mixed — '+d.pctAbove50+'% above 50d MA':'Breadth weak — only '+d.pctAbove50+'% above 50d MA';
+  var vixD=d.vixLevel<18?'Low volatility (VIX '+d.vixLevel+')':d.vixLevel<24?'Moderate volatility (VIX '+d.vixLevel+')':'Elevated volatility (VIX '+d.vixLevel+')';
+  var trendD=d.regime==='uptrend'?'SPY in confirmed uptrend — above 20d, 50d, 200d MAs':d.regime==='downtrend'?'SPY in downtrend — below key MAs':'SPY in choppy range (RSI '+d.spyRSI+')';
+  var breadthD=d.pctAbove50>60?'Breadth healthy ('+d.pctAbove50+'% above 50d MA)':d.pctAbove50>45?'Breadth mixed ('+d.pctAbove50+'% above 50d MA)':'Breadth weak ('+d.pctAbove50+'% above 50d MA)';
   var topS=d.sectors[0].sym,top2=d.sectors[1].sym,btmS=d.sectors[d.sectors.length-1].sym;
-  var macroD=d.tenYrLevel<4.2?'10Y yield supportive at '+d.tenYrLevel+'%.':d.tenYrLevel<4.7?'10Y yield at '+d.tenYrLevel+'% — modest headwind.':'10Y yield elevated at '+d.tenYrLevel+'% — significant headwind.';
+  var macroD=d.tenYrLevel<4.2?'Rates supportive at '+d.tenYrLevel+'%.':d.tenYrLevel<4.7?'Rates at '+d.tenYrLevel+'% — modest headwind.':'Rates elevated at '+d.tenYrLevel+'% — headwind.';
+  var tnxD=d.tenYrTrend==='rising'?' Yields trending higher.':d.tenYrTrend==='falling'?' Yields falling.':' Yields flat.';
   var fomcD=d.fomc72hr?' ⚠ FOMC within 72hrs.':d.fomcDays<=7?' FOMC in '+d.fomcDays+'d.':'';
-  var tnxTrendD=d.tenYrTrend==='rising'?' Yields trending higher.'  :d.tenYrTrend==='falling'?' Yields trending lower.':' Yields flat.';
-  var summary=trendD+'. '+vixD+'. '+breadthD+'. Sector leadership in '+topS+' and '+top2+'. '+btmS+' lagging. '+macroD+tnxTrendD+fomcD;
+  var summary=trendD+'. '+vixD+'. '+breadthD+'. Leaders: '+topS+', '+top2+'. Laggard: '+btmS+'. '+macroD+tnxD+fomcD;
   var dir='';
-  if(decision==='YES')dir=m==='day'?'▶ DAY: Full activity. Favor momentum setups. Tight stops, press winners.':'▶ SWING: Normal sizing. Favor '+topS+'/'+top2+' breakouts. Press winning trades.';
-  else if(decision==='CAUTION')dir=m==='day'?'▶ DAY: Reduce size 40%. A+ setups only. No chasing.':'▶ SWING: Half position size. A+ setups only. Tight stops.';
+  if(decision==='NOTR')dir='▶ NO-TRADE ZONE (score '+scores.total+'): Market is in a gray zone. Ambiguous signals — wait for clarity before initiating.';
+  else if(decision==='YES')dir=m==='day'?'▶ DAY: Full activity. Favor momentum. Tight stops.':'▶ SWING: Normal sizing. Favor '+topS+'/'+top2+' breakouts. Press winners.';
+  else if(decision==='CAUTION')dir=m==='day'?'▶ DAY: Reduce size 40%. A+ setups only.':'▶ SWING: Half size. A+ only. Tight stops.';
   else dir='▶ Stand aside. Preserve capital. Wait for environment to improve.';
   return{summary:summary,dir:dir};
 }
 
-function drawRing(score,color){
-  var c=document.getElementById('ringCanvas');
-  if(!c)return;
-  var ctx=c.getContext('2d');
-  ctx.clearRect(0,0,96,96);
+function drawRing(score,color,isNoTrade){
+  var c=document.getElementById('ringCanvas');if(!c)return;
+  var ctx=c.getContext('2d');ctx.clearRect(0,0,96,96);
   var cx=48,cy=48,r=38,lw=7;
-  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.strokeStyle='#1a2d3d';ctx.lineWidth=lw;ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.strokeStyle=isNoTrade?'#2a3a4a':'#1a2d3d';ctx.lineWidth=lw;ctx.stroke();
   if(score>0){
     ctx.beginPath();ctx.arc(cx,cy,r,-Math.PI/2,-Math.PI/2+(score/100)*Math.PI*2);
-    ctx.strokeStyle=color;ctx.lineWidth=lw;ctx.lineCap='round';ctx.stroke();
+    ctx.strokeStyle=isNoTrade?'#4a6a7a':color;ctx.lineWidth=lw;ctx.lineCap='round';ctx.stroke();
   }
 }
 
 function drawHistoryChart(history){
   var canvas=document.getElementById('historyCanvas');
   if(!canvas||!history||history.length<2){
-    document.getElementById('historyNote').textContent=history&&history.length===1?'1 day recorded — chart builds over time':'accumulating data...';
+    document.getElementById('historyNote').textContent=history&&history.length===1?'1 day — building':'accumulating...';
     return;
   }
   var parent=canvas.parentElement;
-  canvas.width=parent.offsetWidth||400;
-  canvas.height=120;
-  var ctx=canvas.getContext('2d');
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  var w=canvas.width,h=canvas.height;
-  var pad={l:28,r:10,t:10,b:20};
+  canvas.width=parent.offsetWidth||400;canvas.height=120;
+  var ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);
+  var w=canvas.width,h=canvas.height,pad={l:28,r:10,t:10,b:20};
   var chartW=w-pad.l-pad.r,chartH=h-pad.t-pad.b;
   var scores=history.map(function(h){return h.score;});
-  var minS=Math.max(0,Math.min.apply(null,scores)-10);
-  var maxS=Math.min(100,Math.max.apply(null,scores)+10);
+  var minS=Math.max(0,Math.min.apply(null,scores)-10),maxS=Math.min(100,Math.max.apply(null,scores)+10);
   var n=scores.length;
 
-  // Grid lines
+  // No-trade zone band
+  var ntLow=pad.t+chartH-(NO_TRADE_LOW-minS)/(maxS-minS)*chartH;
+  var ntHigh=pad.t+chartH-(NO_TRADE_HIGH-minS)/(maxS-minS)*chartH;
+  ctx.fillStyle='rgba(74,106,122,0.08)';ctx.fillRect(pad.l,ntHigh,chartW,ntLow-ntHigh);
+  ctx.strokeStyle='rgba(74,106,122,0.3)';ctx.lineWidth=0.5;ctx.setLineDash([3,3]);
+  ctx.beginPath();ctx.moveTo(pad.l,ntLow);ctx.lineTo(pad.l+chartW,ntLow);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(pad.l,ntHigh);ctx.lineTo(pad.l+chartW,ntHigh);ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Grid
   ctx.strokeStyle='#1e3a4a';ctx.lineWidth=0.5;
   [60,80].forEach(function(y){
     var gy=pad.t+chartH-(y-minS)/(maxS-minS)*chartH;
     ctx.beginPath();ctx.moveTo(pad.l,gy);ctx.lineTo(pad.l+chartW,gy);ctx.stroke();
-    ctx.fillStyle='#4a6a7a';ctx.font='9px JetBrains Mono,monospace';
-    ctx.fillText(y,0,gy+3);
+    ctx.fillStyle='#4a6a7a';ctx.font='9px JetBrains Mono,monospace';ctx.fillText(y,0,gy+3);
   });
 
-  // Area fill
+  // Area
   ctx.beginPath();
   scores.forEach(function(s,i){
-    var x=pad.l+(i/(n-1))*chartW;
-    var y=pad.t+chartH-(s-minS)/(maxS-minS)*chartH;
+    var x=pad.l+(i/(n-1))*chartW,y=pad.t+chartH-(s-minS)/(maxS-minS)*chartH;
     i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
   });
-  ctx.lineTo(pad.l+chartW,pad.t+chartH);
-  ctx.lineTo(pad.l,pad.t+chartH);
-  ctx.closePath();
-  ctx.fillStyle='rgba(64,196,255,0.06)';ctx.fill();
+  ctx.lineTo(pad.l+chartW,pad.t+chartH);ctx.lineTo(pad.l,pad.t+chartH);ctx.closePath();
+  ctx.fillStyle='rgba(64,196,255,0.05)';ctx.fill();
 
   // Line
   ctx.beginPath();ctx.lineWidth=1.5;ctx.strokeStyle='#40c4ff';
   scores.forEach(function(s,i){
-    var x=pad.l+(i/(n-1))*chartW;
-    var y=pad.t+chartH-(s-minS)/(maxS-minS)*chartH;
+    var x=pad.l+(i/(n-1))*chartW,y=pad.t+chartH-(s-minS)/(maxS-minS)*chartH;
     i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
-  });
-  ctx.stroke();
+  });ctx.stroke();
 
-  // Dots colored by decision
+  // Dots
   scores.forEach(function(s,i){
-    var x=pad.l+(i/(n-1))*chartW;
-    var y=pad.t+chartH-(s-minS)/(maxS-minS)*chartH;
+    var x=pad.l+(i/(n-1))*chartW,y=pad.t+chartH-(s-minS)/(maxS-minS)*chartH;
     ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);
-    ctx.fillStyle=scoreColor(s);ctx.fill();
+    ctx.fillStyle=(s>=NO_TRADE_LOW&&s<=NO_TRADE_HIGH)?'#4a6a7a':scoreColor(s);ctx.fill();
   });
 
-  // Date labels (first and last)
   ctx.fillStyle='#4a6a7a';ctx.font='8px JetBrains Mono,monospace';
   if(history[0])ctx.fillText(history[0].date.slice(5),pad.l,h-4);
   if(history[n-1])ctx.fillText(history[n-1].date.slice(5),pad.l+chartW-24,h-4);
-
   document.getElementById('historyNote').textContent=n+' days';
 }
 
 function updateLocalHistory(score,decision){
   var today=new Date().toISOString().split('T')[0];
-  var exists=localHistory.find(function(h){return h.date===today;});
-  if(!exists){
+  if(!localHistory.find(function(h){return h.date===today;})){
     localHistory.push({date:today,score:score,decision:decision});
     if(localHistory.length>30)localHistory=localHistory.slice(-30);
   }
 }
 
+function renderFeedHealth(feedHealth,feedQuality){
+  if(!feedHealth||Object.keys(feedHealth).length===0){
+    document.getElementById('feedGrid').innerHTML='<span style="font-size:10px;color:var(--text3);">Waiting for first fetch...</span>';
+    return;
+  }
+  var now=Date.now();
+  var STALE=5*60*1000;
+  var html=Object.entries(feedHealth).map(function(e){
+    var k=e[0],v=e[1];
+    var isStale=v.status==='ok'&&(now-v.ts)>STALE;
+    var statCls=v.status==='error'?'err':isStale?'stale':'ok';
+    var statTxt=v.status==='error'?'ERROR':isStale?'STALE':'OK';
+    var lat=v.latency?v.latency+'ms':'—';
+    return '<div class="feed-item"><span class="feed-sym">'+k+'</span><span class="feed-stat '+statCls+'">'+statTxt+'</span><span class="feed-lat">'+lat+'</span></div>';
+  }).join('');
+  document.getElementById('feedGrid').innerHTML=html;
+
+  var ql=document.getElementById('feedQualityLabel');
+  var qCls=feedQuality.quality==='good'?'color:var(--green)':feedQuality.quality==='stale'?'color:var(--amber)':'color:var(--red)';
+  ql.style.cssText=qCls;
+  ql.textContent=feedQuality.label||'checking...';
+}
+
 function renderAll(d){
   var scores=calcScores(d,mode);
-  var decision=getDecision(scores.total,mode);
-  var color=scoreColor(scores.total);
+  var dq=d.feedQuality?d.feedQuality.quality:'good';
+  var decision=getDecision(scores.total,mode,dq);
+  var isNoTrade=decision==='NOTR';
+  var color=isNoTrade?'#4a6a7a':scoreColor(scores.total);
   var text=buildSummary(d,scores,decision,mode);
+
+  // Kill switch
+  var ksArea=document.getElementById('killSwitchArea');
+  if(dq==='bad'){
+    ksArea.innerHTML='<div class="kill-switch">⛔ KILL SWITCH ACTIVE — Critical data feeds are down. Do not trade on this data.</div>';
+  } else {ksArea.innerHTML='';}
 
   // Market status
   var mktEl=document.getElementById('mktStatus');
-  if(d.marketOpen){
-    mktEl.textContent='MARKET OPEN';mktEl.className='mkt-status open';
-  } else {
-    mktEl.textContent=d.marketStatus||'CLOSED';mktEl.className='mkt-status closed';
-  }
-
-  // Market closed banner
+  mktEl.textContent=d.marketOpen?'MARKET OPEN':(d.marketStatus||'CLOSED');
+  mktEl.className='mkt-status '+(d.marketOpen?'open':'closed');
   var closedArea=document.getElementById('mktClosedArea');
-  if(!d.marketOpen){
-    closedArea.innerHTML='<div class="mkt-closed-banner">🕐 <strong>'+( d.marketStatus||'MARKET CLOSED')+'</strong> — Displaying last available close data. Scores reflect prior session conditions.</div>';
-  } else {
-    closedArea.innerHTML='';
-  }
+  if(!d.marketOpen)closedArea.innerHTML='<div class="mkt-closed-banner">🕐 '+(d.marketStatus||'MARKET CLOSED')+' — Displaying last session data. Scores reflect prior close conditions.</div>';
+  else closedArea.innerHTML='';
+
+  // Stale feeds warning
+  var staleArea=document.getElementById('feedStaleArea');
+  if(d.feedQuality&&d.feedQuality.stale&&d.feedQuality.stale.length>0){
+    staleArea.innerHTML='<div class="feed-stale">⚠ STALE FEEDS: '+d.feedQuality.stale.join(', ')+' — data may be delayed more than 5 minutes.</div>';
+  } else {staleArea.innerHTML='';}
+
+  // Live indicator
+  var dot=document.getElementById('liveDot'),lbl=document.getElementById('liveLbl');
+  if(dq==='bad'){dot.className='live-dot err';lbl.className='live-lbl err';lbl.textContent='BAD DATA';}
+  else if(dq==='stale'||dq==='degraded'){dot.className='live-dot stale';lbl.className='live-lbl stale';lbl.textContent='STALE';}
+  else{dot.className='live-dot';lbl.className='live-lbl ok';lbl.textContent='LIVE';}
 
   // Ticker
-  var items=[
-    {sym:'SPY',val:d.spy.price.toFixed(2),chg:d.spy.chg},
-    {sym:'QQQ',val:d.qqq.price.toFixed(2),chg:d.qqq.chg},
-    {sym:'VIX',val:d.vixLevel.toFixed(2),chg:d.vix.chg},
-    {sym:'DXY',val:d.dxy.price.toFixed(2),chg:d.dxy.chg},
-    {sym:'10Y',val:d.tenYrLevel.toFixed(2)+'%',chg:d.tnx.chg},
-  ].concat(d.sectors.slice(0,6).map(function(s){return{sym:s.sym,val:s.chg.toFixed(2)+'%',chg:s.chg};}));
-  var tickHtml=items.concat(items).map(function(it){
-    var cls=it.chg>0?'up':it.chg<0?'dn':'fl';
-    var arrow=it.chg>0?'▲':it.chg<0?'▼':'→';
-    var sign=it.chg>0?'+':'';
+  var items=[{sym:'SPY',val:d.spy.price.toFixed(2),chg:d.spy.chg},{sym:'QQQ',val:d.qqq.price.toFixed(2),chg:d.qqq.chg},
+    {sym:'VIX',val:d.vixLevel.toFixed(2),chg:d.vix.chg},{sym:'DXY',val:d.dxy.price.toFixed(2),chg:d.dxy.chg},
+    {sym:'10Y',val:d.tenYrLevel.toFixed(2)+'%',chg:d.tnx.chg}].concat(d.sectors.slice(0,5).map(function(s){return{sym:s.sym,val:s.chg.toFixed(2)+'%',chg:s.chg};}));
+  document.getElementById('ticker').innerHTML=items.concat(items).map(function(it){
+    var cls=it.chg>0?'up':it.chg<0?'dn':'fl',arrow=it.chg>0?'▲':it.chg<0?'▼':'→',sign=it.chg>0?'+':'';
     return '<span class="ti"><span class="sym">'+it.sym+'</span><span class="val '+cls+'">'+it.val+'</span><span class="'+cls+'">'+arrow+sign+it.chg.toFixed(2)+'</span></span><span class="sep">|</span>';
   }).join('');
-  document.getElementById('ticker').innerHTML=tickHtml;
 
   // Hero
   var badge=document.getElementById('decisionBadge');
-  badge.textContent=decision;badge.className='decision-badge '+decision;
+  badge.textContent=isNoTrade?'NO-TRADE ZONE':decision;
+  badge.className='decision-badge '+(isNoTrade?'NOTR':decision);
   document.getElementById('ringNum').textContent=scores.total;
   document.getElementById('ringNum').style.color=color;
-  drawRing(scores.total,color);
+  drawRing(scores.total,color,isNoTrade);
   var spyChg=d.spy.chg||0;
   document.getElementById('spyPriceLabel').textContent='$'+d.spy.price.toFixed(2);
   var chgEl=document.getElementById('spyChgLabel');
@@ -528,11 +535,19 @@ function renderAll(d){
   document.getElementById('execNum').style.color=ec;
   document.getElementById('execFill').style.width=scores.exec+'%';
   document.getElementById('execFill').style.background=ec;
+  var zoneLbl=document.getElementById('scoreZoneLabel');
+  if(isNoTrade){zoneLbl.textContent='⚠ no-trade zone (45–55)';zoneLbl.style.color='var(--text3)';}
+  else{zoneLbl.textContent='market quality';zoneLbl.style.color='';}
 
-  // Summary
+  // Summary + reasons
   document.getElementById('modeTag').textContent=mode.toUpperCase()+' MODE';
   document.getElementById('summaryBody').textContent=text.summary;
   document.getElementById('directiveBody').textContent=text.dir;
+  var reasons=d.topReasons||[];
+  var isPositive=scores.total>=60;
+  document.getElementById('topReasonsArea').innerHTML=reasons.map(function(r){
+    return '<span class="reason-tag '+(isPositive?'pos':'neg')+'">'+r+'</span>';
+  }).join('');
   document.getElementById('srcLabel').textContent='source: '+(d.dataSource||'Yahoo Finance');
   document.getElementById('cacheLabel').textContent=d.cached?'(cached)':'(fresh)';
   var upd=d.lastUpdated?new Date(d.lastUpdated).toLocaleTimeString():'';
@@ -540,38 +555,33 @@ function renderAll(d){
 
   // Alerts
   var alertArea=document.getElementById('alertArea');
-  if(d.fomc72hr)alertArea.innerHTML='<div class="alert-banner">⚠ <strong>FOMC ALERT:</strong> Rate decision within 72 hours. Reduce exposure, widen stops, avoid new initiations.</div>';
-  else if(d.fomcDays<=7)alertArea.innerHTML='<div class="alert-banner">⚠ <strong>FOMC IN '+d.fomcDays+' DAYS:</strong> Monitor positioning into the event.</div>';
+  if(d.fomc72hr)alertArea.innerHTML='<div class="alert-banner">⚠ <strong>FOMC ALERT:</strong> Rate decision within 72 hours. Reduce exposure, widen stops.</div>';
+  else if(d.fomcDays<=7)alertArea.innerHTML='<div class="alert-banner">⚠ <strong>FOMC IN '+d.fomcDays+' DAYS:</strong> Monitor positioning.</div>';
   else alertArea.innerHTML='';
 
   // Data panels
   var panels=[
-    {title:'VOLATILITY',score:scores.vix,
-     badge:scores.vix>65?{cls:'ok',txt:'LOW RISK'}:scores.vix>40?{cls:'mid',txt:'MODERATE'}:{cls:'bad',txt:'RISK-OFF'},
+    {title:'VOLATILITY',score:scores.vix,badge:scores.vix>65?{cls:'ok',txt:'LOW RISK'}:scores.vix>40?{cls:'mid',txt:'MODERATE'}:{cls:'bad',txt:'RISK-OFF'},
      rows:[{k:'VIX level',v:d.vixLevel.toFixed(1),cls:d.vixLevel<18?'up':d.vixLevel<24?'warn':'dn'},
            {k:'VIX slope 5d',v:(d.vixSlope>0?'+':'')+d.vixSlope.toFixed(1),cls:d.vixSlope<0?'up':'dn'},
            {k:'VIX %ile',v:d.vixPercentile+'th',cls:d.vixPercentile<30?'up':d.vixPercentile<60?'warn':'dn'},
            {k:'Put/Call',v:d.putCallRatio.toFixed(2),cls:d.putCallRatio<0.9?'up':d.putCallRatio<1.1?'warn':'dn'}]},
-    {title:'TREND',score:scores.trend,
-     badge:scores.trend>65?{cls:'ok',txt:'BULLISH'}:scores.trend>40?{cls:'mid',txt:'MIXED'}:{cls:'bad',txt:'BEARISH'},
+    {title:'TREND',score:scores.trend,badge:scores.trend>65?{cls:'ok',txt:'BULLISH'}:scores.trend>40?{cls:'mid',txt:'MIXED'}:{cls:'bad',txt:'BEARISH'},
      rows:[{k:'SPY vs 20d',v:d.spyVs20.toUpperCase(),cls:d.spyVs20==='above'?'up':'dn'},
            {k:'SPY vs 50d',v:d.spyVs50.toUpperCase(),cls:d.spyVs50==='above'?'up':'dn'},
            {k:'SPY vs 200d',v:d.spyVs200.toUpperCase(),cls:d.spyVs200==='above'?'up':'dn'},
            {k:'RSI (14d)',v:d.spyRSI,cls:d.spyRSI>50&&d.spyRSI<70?'up':d.spyRSI>=70?'warn':'dn'}]},
-    {title:'BREADTH',score:scores.breadth,
-     badge:scores.breadth>65?{cls:'ok',txt:'EXPANDING'}:scores.breadth>40?{cls:'mid',txt:'MIXED'}:{cls:'bad',txt:'NARROW'},
+    {title:'BREADTH',score:scores.breadth,badge:scores.breadth>65?{cls:'ok',txt:'EXPANDING'}:scores.breadth>40?{cls:'mid',txt:'MIXED'}:{cls:'bad',txt:'NARROW'},
      rows:[{k:'% > 20d MA',v:d.pctAbove20+'%',cls:d.pctAbove20>60?'up':d.pctAbove20>45?'warn':'dn'},
            {k:'% > 50d MA',v:d.pctAbove50+'%',cls:d.pctAbove50>55?'up':d.pctAbove50>40?'warn':'dn'},
            {k:'A/D ratio',v:d.adRatio.toFixed(2),cls:d.adRatio>1.2?'up':d.adRatio>0.9?'warn':'dn'},
            {k:'NQ Hi vs Lo',v:d.nasdaqHL,cls:d.nasdaqHL>70?'up':d.nasdaqHL>50?'warn':'dn'}]},
-    {title:'MOMENTUM',score:scores.momentum,
-     badge:scores.momentum>65?{cls:'ok',txt:'STRONG'}:scores.momentum>40?{cls:'mid',txt:'MIXED'}:{cls:'bad',txt:'WEAK'},
+    {title:'MOMENTUM',score:scores.momentum,badge:scores.momentum>65?{cls:'ok',txt:'STRONG'}:scores.momentum>40?{cls:'mid',txt:'MIXED'}:{cls:'bad',txt:'WEAK'},
      rows:[{k:'Lead sector',v:d.sectors[0].sym,cls:'up'},
            {k:'Top 3 avg',v:'+'+(((d.sectors[0].chg+d.sectors[1].chg+d.sectors[2].chg)/3).toFixed(2))+'%',cls:'up'},
            {k:'Btm 3 avg',v:(((d.sectors[8].chg+d.sectors[9].chg+d.sectors[10].chg)/3).toFixed(2))+'%',cls:'dn'},
            {k:'Sectors +',v:d.sectors.filter(function(s){return s.chg>0;}).length+'/11',cls:d.sectors.filter(function(s){return s.chg>0;}).length>7?'up':d.sectors.filter(function(s){return s.chg>0;}).length>5?'warn':'dn'}]},
-    {title:'MACRO',score:scores.macro,
-     badge:scores.macro>65?{cls:'ok',txt:'TAILWIND'}:scores.macro>40?{cls:'mid',txt:'NEUTRAL'}:{cls:'bad',txt:'HEADWIND'},
+    {title:'MACRO',score:scores.macro,badge:scores.macro>65?{cls:'ok',txt:'TAILWIND'}:scores.macro>40?{cls:'mid',txt:'NEUTRAL'}:{cls:'bad',txt:'HEADWIND'},
      rows:[{k:'10Y yield',v:d.tenYrLevel.toFixed(2)+'%',cls:d.tenYrLevel<4.2?'up':d.tenYrLevel<4.7?'warn':'dn'},
            {k:'10Y trend',v:d.tenYrTrend.toUpperCase(),cls:d.tenYrTrend==='falling'?'up':d.tenYrTrend==='rising'?'dn':'fl'},
            {k:'DXY trend',v:d.dxyTrend.toUpperCase(),cls:d.dxyTrend==='falling'?'up':d.dxyTrend==='rising'?'dn':'fl'},
@@ -583,17 +593,17 @@ function renderAll(d){
     return '<div class="dp"><div class="dp-hdr"><span class="dp-title">'+p.title+'</span><span class="dp-badge '+p.badge.cls+'">'+p.badge.txt+'</span></div><div class="dp-rows">'+rows+'</div><div class="dp-bar-track"><div class="dp-bar-fill" style="width:'+p.score+'%;background:'+c+';"></div></div><div class="dp-score-lbl">score: <span style="color:'+c+'">'+p.score+'</span></div></div>';
   }).join('');
 
+  // Feed health
+  renderFeedHealth(d.feedHealth||{},d.feedQuality||{quality:'good',label:'OK'});
+
   // Sectors
   var sorted=d.sectors.slice().sort(function(a,b){return b.chg-a.chg;});
   var maxAbs=Math.max.apply(null,sorted.map(function(s){return Math.abs(s.chg);}));
   if(maxAbs===0)maxAbs=1;
   document.getElementById('sectorRows').innerHTML=sorted.map(function(s,i){
-    var pos=s.chg>=0;
-    var isLeader=i<3,isLaggard=i>=sorted.length-3;
+    var pos=s.chg>=0,isLeader=i<3,isLaggard=i>=sorted.length-3;
     var fillColor=pos?(isLeader?'#00e676':'#4db6ac'):(isLaggard?'#ff5252':'#ef9a9a');
-    var pct=Math.round((Math.abs(s.chg)/maxAbs)*88);
-    var sign=s.chg>=0?'+':'';
-    var tc=pos?'#00e676':'#ff5252';
+    var pct=Math.round((Math.abs(s.chg)/maxAbs)*88),sign=s.chg>=0?'+':'',tc=pos?'#00e676':'#ff5252';
     return '<div class="sector-row"><span class="s-sym">'+s.sym+'</span><div class="s-track"><div class="s-fill" style="width:'+pct+'%;background:'+fillColor+';opacity:0.25;"></div><div class="s-fill" style="width:'+Math.round(pct*0.65)+'%;background:'+fillColor+';opacity:0.75;"></div><span class="s-pct" style="color:'+tc+'">'+sign+s.chg.toFixed(2)+'%</span></div><span class="s-name">'+s.name+'</span></div>';
   }).join('');
 
@@ -606,60 +616,44 @@ function renderAll(d){
   var tc=scoreColor(scores.total);
   document.getElementById('sbTotal').innerHTML='<span class="sb-total-lbl">WEIGHTED TOTAL</span><span class="sb-total-val" style="color:'+tc+'">'+scores.total+'%</span>';
 
-  // Score history
+  // History
   updateLocalHistory(scores.total,decision);
   var history=(d.scoreHistory&&d.scoreHistory.length>0)?d.scoreHistory:localHistory;
   drawHistoryChart(history);
-
   document.getElementById('footerTime').textContent=new Date().toLocaleString();
 }
 
 async function fetchData(){
-  if(isLoading)return;
-  isLoading=true;
-  var dot=document.getElementById('liveDot'),lbl=document.getElementById('liveLbl');
+  if(isLoading)return;isLoading=true;
   document.getElementById('errArea').innerHTML='';
   try{
-    var ctrl=new AbortController();
-    var tid=setTimeout(function(){ctrl.abort();},12000);
-    var res=await fetch(API_URL,{signal:ctrl.signal});
-    clearTimeout(tid);
+    var ctrl=new AbortController(),tid=setTimeout(function(){ctrl.abort();},12000);
+    var res=await fetch(API_URL,{signal:ctrl.signal});clearTimeout(tid);
     if(!res.ok)throw new Error('HTTP '+res.status);
-    var data=await res.json();
-    if(data.error)throw new Error(data.error);
-    lastData=data;
-    renderAll(data);
-    dot.className='live-dot';lbl.className='live-lbl ok';lbl.textContent='LIVE';
-    secondsSince=0;
+    var data=await res.json();if(data.error)throw new Error(data.error);
+    lastData=data;renderAll(data);secondsSince=0;
   }catch(err){
-    console.warn('API fetch failed:',err.message);
+    console.warn('Fetch failed:',err.message);
+    var dot=document.getElementById('liveDot'),lbl=document.getElementById('liveLbl');
     dot.className='live-dot err';lbl.className='live-lbl err';lbl.textContent='DEMO';
-    if(!lastData){renderAll(getMockData());}
+    if(!lastData)renderAll(getMockData());
     var isOffline=err.message.includes('fetch')||err.message.includes('abort')||err.message.includes('Failed');
-    if(isOffline)document.getElementById('errArea').innerHTML='<div class="err-banner">⚡ Backend not detected at '+API_URL+' — running demo data. Start Node server for live data.</div>';
+    if(isOffline)document.getElementById('errArea').innerHTML='<div class="err-banner">⚡ Backend unreachable at '+API_URL+' — running demo data.</div>';
   }finally{isLoading=false;}
 }
 
 function manualRefresh(){
-  secondsSince=0;
-  document.getElementById('tsLabel').textContent='refreshing...';
-  clearInterval(refreshTimer);
-  fetchData().then(function(){startAutoRefresh();});
+  secondsSince=0;document.getElementById('tsLabel').textContent='refreshing...';
+  clearInterval(refreshTimer);fetchData().then(function(){startAutoRefresh();});
 }
-
 function setMode(m){
   mode=m;
   document.querySelectorAll('.mode-btn').forEach(function(b){b.classList.toggle('active',b.textContent.toLowerCase()===m);});
   if(lastData)renderAll(lastData);
 }
+function startAutoRefresh(){clearInterval(refreshTimer);refreshTimer=setInterval(function(){secondsSince=0;fetchData();},45000);}
 
-function startAutoRefresh(){
-  clearInterval(refreshTimer);
-  refreshTimer=setInterval(function(){secondsSince=0;fetchData();},45000);
-}
-
-fetchData();
-startAutoRefresh();
+fetchData();startAutoRefresh();
 setInterval(function(){secondsSince++;document.getElementById('tsLabel').textContent='updated '+secondsSince+'s ago';},1000);
 </script>
 </body>
