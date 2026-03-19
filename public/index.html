@@ -206,6 +206,13 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
 .wl-header{padding:12px 14px 0;display:flex;align-items:center;justify-content:space-between;}
 .wl-refresh{background:var(--bg3);border:1px solid var(--border2);color:var(--blue);font-family:var(--mono);font-size:10px;padding:3px 9px;cursor:pointer;border-radius:2px;}
 @media(max-width:700px){.watchlist-grid{grid-template-columns:1fr;}}
+.sc-signal{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:2px;border:1px solid;}
+.sc-signal.hold{background:rgba(0,230,118,.05);border-color:rgba(0,230,118,.2);color:var(--green);}
+.sc-signal.tighten{background:rgba(255,171,64,.05);border-color:rgba(255,171,64,.2);color:var(--amber);}
+.sc-signal.exit{background:rgba(255,82,82,.08);border-color:rgba(255,82,82,.3);color:var(--red);}
+.sc-signal-icon{font-size:13px;}
+.sc-signal-text{font-size:10px;font-weight:600;letter-spacing:1px;}
+.sc-signal-reason{font-size:9px;opacity:0.8;margin-left:4px;}
 </style>
 </head>
 <body>
@@ -732,6 +739,54 @@ function switchTab(tab) {
 // WATCHLIST
 function scoreCol(s){ return s>=65?'#00e676':s>=45?'#ffab40':'#ff5252'; }
 
+function getSellSignal(s, marketDecision) {
+  var triggers = [];
+  var level = 'hold';
+
+  // Exit triggers (strongest)
+  if (s.vs20 === 'below' && s.vs50 === 'below' && s.vs200 === 'below') {
+    triggers.push('Below all MAs'); level = 'exit';
+  }
+  if (s.rsi > 78) {
+    triggers.push('RSI overbought ('+s.rsi+')'); level = 'exit';
+  }
+  if (s.relStrength < -8) {
+    triggers.push('RS collapsing vs SPY'); level = 'exit';
+  }
+  if (marketDecision === 'NO' && s.verdict === 'AVOID') {
+    triggers.push('Market NO + stock AVOID'); level = level === 'hold' ? 'exit' : level;
+  }
+
+  // Tighten stop triggers
+  if (level === 'hold') {
+    if (s.vs20 === 'below' && s.vs50 === 'above') {
+      triggers.push('Broke below 20d MA'); level = 'tighten';
+    }
+    if (s.rsi > 70 && s.rsi <= 78) {
+      triggers.push('RSI extended ('+s.rsi+')'); level = 'tighten';
+    }
+    if (s.relStrength < -3 && s.relStrength >= -8) {
+      triggers.push('RS weakening vs SPY'); level = 'tighten';
+    }
+    if (s.momentumScore < 30 && s.setupScore > 50) {
+      triggers.push('Momentum fading'); level = 'tighten';
+    }
+    if (marketDecision === 'CAUTION') {
+      triggers.push('Market in caution zone'); level = 'tighten';
+    }
+  }
+
+  var labels = { hold: 'HOLD / NO POSITION', tighten: 'TIGHTEN STOP', exit: 'EXIT SIGNAL' };
+  var icons = { hold: '●', tighten: '▲', exit: '⛔' };
+
+  return {
+    level: level,
+    label: labels[level],
+    icon: icons[level],
+    reason: triggers.slice(0, 2).join(' · ') || (level === 'hold' ? 'Structure intact' : '')
+  };
+}
+
 function renderWatchlist(stocks) {
   if (!stocks || stocks.length === 0) {
     document.getElementById('watchlistGrid').innerHTML = '<div class="wl-loading">No data available — try refreshing.</div>';
@@ -763,6 +818,9 @@ function renderWatchlist(stocks) {
     var reasonsHtml = s.reasons.map(function(r){
       return '<span class="sc-reason">'+r+'</span>';
     }).join('');
+
+    var signal = getSellSignal(s, lastData ? getDecision(calcScores(lastData, mode).total, mode, lastData.feedQuality ? lastData.feedQuality.quality : 'good') : 'NO');
+    var signalHtml = '<div class="sc-signal '+signal.level+'"><span class="sc-signal-icon">'+signal.icon+'</span><span class="sc-signal-text">'+signal.label+'</span><span class="sc-signal-reason">'+signal.reason+'</span></div>';
 
     return '<div class="stock-card '+s.verdict+'">' +
       '<div class="sc-header">' +
@@ -798,6 +856,7 @@ function renderWatchlist(stocks) {
         '</div>' +
       '</div>' +
 
+      signalHtml +
       '<div class="sc-metrics">'+metricsHtml+'</div>' +
       '<div class="sc-reasons">'+reasonsHtml+'</div>' +
     '</div>';
