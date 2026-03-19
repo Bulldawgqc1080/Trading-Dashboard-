@@ -177,7 +177,7 @@ async function buildMarketData() {
     fetchSingleQuote('^VIX'),
     fetchSingleQuote('DX-Y.NYB'),
     fetchSingleQuote('^TNX'),
-    fetchYahooHistory('SPY', 220),
+    fetchYahooHistory('SPY', 300),
     fetchYahooHistory('^VIX', 30),
     ...sectorSyms.map(s => fetchSingleQuote(s))
   ]);
