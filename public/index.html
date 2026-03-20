@@ -588,14 +588,22 @@ function renderAll(d){
   else{dot.className='live-dot';lbl.className='live-lbl ok';lbl.textContent='LIVE';}
 
   // Ticker
-  var items=[{sym:'SPY',val:d.spy.price.toFixed(2),chg:d.spy.chg,price:d.spy.price},{sym:'QQQ',val:d.qqq.price.toFixed(2),chg:d.qqq.chg,price:d.qqq.price},
-    {sym:'VIX',val:d.vixLevel.toFixed(2),chg:d.vix.chg},{sym:'DXY',val:d.dxy.price.toFixed(2),chg:d.dxy.chg,price:d.dxy.price},
-    {sym:'10Y',val:d.tenYrLevel.toFixed(2)+'%',chg:d.tnx.chg}].concat(d.sectors.slice(0,5).map(function(s){return{sym:s.sym,val:s.chg.toFixed(2)+'%',chg:s.chg,price:s.price};}));
+  var spyExt=d.spy&&d.spy.extType&&d.spy.extPrice;
+  var qqqExt=d.qqq&&d.qqq.extType&&d.qqq.extPrice;
+  var spyExtTag=spyExt?('['+d.spy.extType+'] ':'');
+  var qqqExtTag=qqqExt?('['+d.qqq.extType+'] ':'');
+  var items=[
+    {sym:'SPY',val:spyExtTag+(spyExt?d.spy.extPrice.toFixed(2):d.spy.price.toFixed(2)),chg:(spyExt?d.spy.extChangePct:d.spy.chg)||0,price:(spyExt?d.spy.extPrice:d.spy.price),dollar:(spyExt?d.spy.extChange:d.spy.dollar)},
+    {sym:'QQQ',val:qqqExtTag+(qqqExt?d.qqq.extPrice.toFixed(2):d.qqq.price.toFixed(2)),chg:(qqqExt?d.qqq.extChangePct:d.qqq.chg)||0,price:(qqqExt?d.qqq.extPrice:d.qqq.price),dollar:(qqqExt?d.qqq.extChange:d.qqq.dollar)},
+    {sym:'VIX',val:d.vixLevel.toFixed(2),chg:d.vix.chg||0},
+    {sym:'DXY',val:d.dxy.price.toFixed(2),chg:d.dxy.chg||0,price:d.dxy.price},
+    {sym:'10Y',val:d.tenYrLevel.toFixed(2)+'%',chg:d.tnx.chg||0}
+  ].concat(d.sectors.slice(0,5).map(function(s){return{sym:s.sym,val:s.chg.toFixed(2)+'%',chg:s.chg,price:s.price};}));
   document.getElementById('ticker').innerHTML=items.concat(items).map(function(it){
     var cls=it.chg>0?'up':it.chg<0?'dn':'fl',arrow=it.chg>0?'▲':it.chg<0?'▼':'→',sign=it.chg>0?'+':'';
     var dollarStr='';
     if(it.price&&it.chg!==undefined){
-      var dollarChg=Math.round(it.price*(it.chg/100)*100)/100;
+      var dollarChg=it.dollar!=null?it.dollar:Math.round(it.price*(it.chg/100)*100)/100;
       dollarStr=' <span class="'+cls+'">'+(dollarChg>=0?'+':'')+dollarChg.toFixed(2)+'</span>';
     }
     return '<span class="ti"><span class="sym">'+it.sym+'</span><span class="val '+cls+'">'+it.val+'</span><span class="'+cls+'">'+arrow+sign+it.chg.toFixed(2)+'%</span>'+dollarStr+'</span><span class="sep">|</span>';
