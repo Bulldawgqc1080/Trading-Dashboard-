@@ -720,7 +720,7 @@ function renderAll(d){
     return '<div class="sb-row"><div class="sb-hdr"><span class="sb-cat">'+c.name+'</span><span class="sb-wt">'+c.wt+'</span><span class="sb-val" style="color:'+col+'">'+c.score+'</span></div><div class="sb-track"><div class="sb-fill" style="width:'+c.score+'%;background:'+col+'"></div></div></div>';
   }).join('');
   var tc=scoreColor(scores.total);
-  document.getElementById('sbTotal').innerHTML='<span class="sb-total-lbl">WEIGHTED TOTAL</span><span class="sb-total-val" style="color:'+tc+'">'+scores.total+'%</span>';
+  document.getElementById('sbTotal').innerHTML='<span class="sb-total-val" style="color:'+tc+'">'+scores.total+'%</span>';
 
   // History
   updateLocalHistory(scores.total,decision);
