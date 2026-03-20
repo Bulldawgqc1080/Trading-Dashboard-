@@ -350,19 +350,26 @@ function addToScoreHistory(score, decision) {
 async function fetchV7Quotes(symbols) {
   try {
     const symStr = symbols.join(',');
-    const u = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symStr}&fields=regularMarketPrice,regularMarketChangePercent,regularMarketChange,regularMarketPreviousClose,marketState`;
+    const u = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symStr}&fields=regularMarketPrice,regularMarketChangePercent,regularMarketChange,regularMarketPreviousClose,preMarketPrice,preMarketChange,preMarketChangePercent,postMarketPrice,postMarketChange,postMarketChangePercent,marketState`;
     const data = await httpsGet(u);
     const results = data?.quoteResponse?.result || [];
     const map = {};
     results.forEach(q => {
       // Calculate pct from price and prev close for maximum accuracy
       const n = v => Number.isFinite(v) ? Math.round(v * 100) / 100 : null;
+      const state = q.marketState || 'REGULAR';
+      const isPre = state === 'PRE' || state === 'PREPRE';
+      const isPost = state === 'POST' || state === 'POSTPOST';
       map[q.symbol] = {
         price: n(q.regularMarketPrice),
         changePct: n(q.regularMarketChangePercent),
         change: n(q.regularMarketChange),
         prev: n(q.regularMarketPreviousClose),
-        marketState: q.marketState || 'REGULAR'
+        marketState: state,
+        extPrice: isPre ? n(q.preMarketPrice) : isPost ? n(q.postMarketPrice) : null,
+        extChange: isPre ? n(q.preMarketChange) : isPost ? n(q.postMarketChange) : null,
+        extChangePct: isPre ? n(q.preMarketChangePercent) : isPost ? n(q.postMarketChangePercent) : null,
+        extType: isPre ? 'PRE' : isPost ? 'POST' : null
       };
     });
     return map;
@@ -452,8 +459,8 @@ async function buildMarketData() {
   const feedQuality = getFeedQuality();
 
   const marketData = {
-    spy: { price: Math.round(spyPrice * 100) / 100, chg: Math.round(spyChgPct * 100) / 100, dollar: Math.round(spyChg * 100) / 100, prev: Math.round(spyPrev * 100) / 100 },
-    qqq: { price: Math.round(qqqPrice * 100) / 100, chg: Math.round(qqqChgPct * 100) / 100, dollar: Math.round(qqqChg * 100) / 100, prev: Math.round(qqqPrev * 100) / 100 },
+    spy: { price: Math.round(spyPrice * 100) / 100, chg: Math.round(spyChgPct * 100) / 100, dollar: Math.round(spyChg * 100) / 100, prev: Math.round(spyPrev * 100) / 100, extPrice: spyV7.extPrice, extChange: spyV7.extChange, extChangePct: spyV7.extChangePct, extType: spyV7.extType },
+    qqq: { price: Math.round(qqqPrice * 100) / 100, chg: Math.round(qqqChgPct * 100) / 100, dollar: Math.round(qqqChg * 100) / 100, prev: Math.round(qqqPrev * 100) / 100, extPrice: qqqV7.extPrice, extChange: qqqV7.extChange, extChangePct: qqqV7.extChangePct, extType: qqqV7.extType },
     vix: { price: vixLevel, chg: Math.round(vixChgPct * 100) / 100 },
     dxy: { price: dxyPrice, chg: Math.round(dxyChgPct * 100) / 100 },
     tnx: { price: tnxLevel, chg: Math.round(tnxChgPct * 100) / 100 },
