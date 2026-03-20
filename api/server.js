@@ -436,14 +436,14 @@ async function buildMarketData() {
     qqq: { price: Math.round(qqqPrice * 100) / 100, chg: Math.round(qqqChgPct * 100) / 100 },
     vix: { price: vixLevel, chg: Math.round(vixChgPct * 100) / 100 },
     dxy: { price: dxyPrice, chg: Math.round(dxyChgPct * 100) / 100 },
-    tnx: { price: tnxLevel, chg: Math.round((tnx.changePct || 0) * 100) / 100 },
+    tnx: { price: tnxLevel, chg: Math.round(tnxChgPct * 100) / 100 },
     spyVs20: spy20 && spyPrice > spy20 ? 'above' : 'below',
     spyVs50: spy50 && spyPrice > spy50 ? 'above' : 'below',
     spyVs200: spy200 && spyPrice > spy200 ? 'above' : 'below',
     spy20: Math.round((spy20 || 0) * 100) / 100,
     spy50: Math.round((spy50 || 0) * 100) / 100,
     spy200: Math.round((spy200 || 0) * 100) / 100,
-    qqqVs50: qqqPrice > (spy50 || 999) ? 'above' : 'below',
+    qqqVs50: qqq.ma50 ? (qqqPrice > qqq.ma50 ? 'above' : 'below') : 'unknown',
     spyRSI, regime, vixLevel, vixSlope,
     vixPercentile: estimateVixPercentile(vixLevel),
     putCallRatio: 0.85,
@@ -493,7 +493,7 @@ async function fetchStockQuoteMAs(symbol) {
   } catch(e) { return null; }
 }
 
-async function fetchStockData(symbol, spyHistory) {
+async function fetchStockData(symbol, spyHistory, wlV7Quotes) {
   try {
     const [history, quote, quoteMAs] = await Promise.all([
       fetchYahooHistory(symbol, 400),
@@ -503,7 +503,8 @@ async function fetchStockData(symbol, spyHistory) {
     if (!quote || history.length < 20) return null;
 
     const price = quote.price;
-    const changePct = quote.changePct;
+    // Use pre-fetched v7 changePct for accuracy (matches Yahoo website)
+    const changePct = (wlV7Quotes && wlV7Quotes[symbol]?.changePct) ?? quote.changePct;
     const ma20 = calcSMA(history, 20);
     const ma50 = calcSMA(history, 50) || (quoteMAs && quoteMAs.ma50) || null;
     const ma200 = calcSMA(history, 200) || (quoteMAs && quoteMAs.ma200) || null;
@@ -596,7 +597,9 @@ async function fetchStockData(symbol, spyHistory) {
 }
 
 async function buildWatchlistData(spyHistory) {
-  const results = await Promise.all(WATCHLIST.map(sym => fetchStockData(sym, spyHistory)));
+  // Batch fetch v7 quotes for all watchlist symbols at once (efficiency)
+  const wlV7Quotes = await fetchV7Quotes(WATCHLIST);
+  const results = await Promise.all(WATCHLIST.map(sym => fetchStockData(sym, spyHistory, wlV7Quotes)));
   return results.filter(r => r !== null).sort((a, b) => b.combinedScore - a.combinedScore);
 }
 
@@ -649,7 +652,7 @@ const server = http.createServer(async (req, res) => {
   if (parsed.pathname === '/api/watchlist') {
     try {
       // Use cached spy history if available
-      const spyHist = cache.data ? [] : await fetchYahooHistory('SPY', 220);
+      const spyHist = await fetchYahooHistory('SPY', 220);
       const data = await getWatchlistData(spyHist);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(data));
