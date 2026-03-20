@@ -660,43 +660,6 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (parsed.pathname === '/api/debug') {
-    try {
-      const period2 = Math.floor(Date.now() / 1000);
-      const period1 = period2 - (7 * 24 * 3600);
-      const u = `https://query1.finance.yahoo.com/v8/finance/chart/SPY?period1=${period1}&period2=${period2}&interval=1d&includePrePost=false`;
-      const data = await httpsGet(u);
-      const result = data?.chart?.result?.[0];
-      const meta = result?.meta || {};
-      const closes = result?.indicators?.quote?.[0]?.close || [];
-      const timestamps = result?.timestamp || [];
-      const validCloses = closes.filter(c => c !== null && !isNaN(c));
-      const todayTs = new Date(); todayTs.setHours(0,0,0,0);
-      const todayEpoch = todayTs.getTime() / 1000;
-      let prevFromTs = 0;
-      for (let i = timestamps.length - 1; i >= 0; i--) {
-        if (timestamps[i] < todayEpoch && closes[i] !== null && !isNaN(closes[i])) {
-          prevFromTs = closes[i]; break;
-        }
-      }
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        price: meta.regularMarketPrice,
-        chartPreviousClose: meta.chartPreviousClose,
-        timestamps: timestamps.slice(-4),
-        closes: closes.slice(-4),
-        todayEpoch,
-        prevFromTimestamp: prevFromTs,
-        allCloses: validCloses.slice(-5),
-        calcPctFromChartPrev: meta.chartPreviousClose ? ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose * 100).toFixed(2) : null,
-        calcPctFromTsMethod: prevFromTs ? ((meta.regularMarketPrice - prevFromTs) / prevFromTs * 100).toFixed(2) : null
-      }));
-    } catch(e) {
-      res.writeHead(500); res.end(JSON.stringify({error: e.message}));
-    }
-    return;
-  }
-
   if (parsed.pathname === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', uptime: process.uptime(), feedHealth }));
