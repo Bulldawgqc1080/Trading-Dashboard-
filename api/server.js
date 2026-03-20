@@ -337,10 +337,27 @@ function addToScoreHistory(score, decision) {
   }
 }
 
+async function fetchV7Quotes(symbols) {
+  try {
+    const symStr = symbols.join(',');
+    const u = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symStr}&fields=regularMarketPrice,regularMarketChangePercent,regularMarketChange`;
+    const data = await httpsGet(u);
+    const results = data?.quoteResponse?.result || [];
+    const map = {};
+    results.forEach(q => {
+      map[q.symbol] = {
+        changePct: Math.round((q.regularMarketChangePercent || 0) * 100) / 100,
+        change: Math.round((q.regularMarketChange || 0) * 100) / 100
+      };
+    });
+    return map;
+  } catch(e) { return {}; }
+}
+
 async function buildMarketData() {
   const sectorSyms = ['XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLU','XLB','XLRE','XLC'];
 
-  const [spyData, qqqData, vixData, dxyData, tnxData, spyHistory, vixHistory, tnxHistory, dxyHistory, ...sectorResults] = await Promise.all([
+  const [spyData, qqqData, vixData, dxyData, tnxData, spyHistory, vixHistory, tnxHistory, dxyHistory, v7Quotes, ...sectorResults] = await Promise.all([
     fetchSingleQuote('SPY', 'SPY'),
     fetchSingleQuote('QQQ', 'QQQ'),
     fetchSingleQuote('^VIX', 'VIX'),
@@ -350,6 +367,7 @@ async function buildMarketData() {
     fetchYahooHistory('^VIX', 30),
     fetchYahooHistory('^TNX', 20),
     fetchYahooHistory('DX-Y.NYB', 20),
+    fetchV7Quotes(['SPY','QQQ','^VIX','DX-Y.NYB','^TNX','XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLU','XLB','XLRE','XLC']),
     ...sectorSyms.map(s => fetchSingleQuote(s, s))
   ]);
 
@@ -377,12 +395,12 @@ async function buildMarketData() {
   const sectors = sectorSyms.map((sym, i) => ({
     sym, name: sectorNames[sym],
     price: sectorResults[i]?.price || 0,
-    chg: sectorResults[i]?.changePct || 0,
-    score: Math.min(100, Math.max(0, Math.round(50 + (sectorResults[i]?.changePct || 0) * 10)))
+    chg: Math.round((v7Quotes[sym]?.changePct ?? sectorResults[i]?.changePct ?? 0) * 100) / 100,
+    score: Math.min(100, Math.max(0, Math.round(50 + (v7Quotes[sym]?.changePct ?? sectorResults[i]?.changePct ?? 0) * 10)))
   })).sort((a, b) => b.chg - a.chg);
 
   const sectorChanges = sectors.map(s => s.chg);
-  const breadth = estimateBreadth(spy.changePct || 0, sectorChanges);
+  const breadth = estimateBreadth(spyChgPct || 0, sectorChanges);
   const tenYrTrend = calcTrend(tnxHistory, 3, 10);
   const dxyTrend = calcTrend(dxyHistory, 3, 10);
   const regime = (spyPrice > spy50 && spyPrice > spy200 && spyRSI > 45) ? 'uptrend'
@@ -392,10 +410,10 @@ async function buildMarketData() {
   const feedQuality = getFeedQuality();
 
   const marketData = {
-    spy: { price: Math.round(spyPrice * 100) / 100, chg: Math.round((spy.changePct || 0) * 100) / 100 },
-    qqq: { price: Math.round(qqqPrice * 100) / 100, chg: Math.round((qqq.changePct || 0) * 100) / 100 },
-    vix: { price: vixLevel, chg: Math.round((vixQ.changePct || 0) * 100) / 100 },
-    dxy: { price: dxyPrice, chg: Math.round((dxy.changePct || 0) * 100) / 100 },
+    spy: { price: Math.round(spyPrice * 100) / 100, chg: Math.round(spyChgPct * 100) / 100 },
+    qqq: { price: Math.round(qqqPrice * 100) / 100, chg: Math.round(qqqChgPct * 100) / 100 },
+    vix: { price: vixLevel, chg: Math.round(vixChgPct * 100) / 100 },
+    dxy: { price: dxyPrice, chg: Math.round(dxyChgPct * 100) / 100 },
     tnx: { price: tnxLevel, chg: Math.round((tnx.changePct || 0) * 100) / 100 },
     spyVs20: spy20 && spyPrice > spy20 ? 'above' : 'below',
     spyVs50: spy50 && spyPrice > spy50 ? 'above' : 'below',
