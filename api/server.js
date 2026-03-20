@@ -360,9 +360,10 @@ async function fetchV7Quotes(symbols) {
       const prev = q.regularMarketPreviousClose || 0;
       const calcPct = prev > 0 ? ((price - prev) / prev) * 100 : (q.regularMarketChangePercent || 0);
       map[q.symbol] = {
-        changePct: Math.round(calcPct * 100) / 100,
+        price: Math.round((q.regularMarketPrice || 0) * 100) / 100,
+        changePct: Math.round((q.regularMarketChangePercent || 0) * 100) / 100,
         change: Math.round((q.regularMarketChange || 0) * 100) / 100,
-        prev: Math.round(prev * 100) / 100
+        prev: Math.round((q.regularMarketPreviousClose || 0) * 100) / 100
       };
     });
     return map;
@@ -397,13 +398,13 @@ async function buildMarketData() {
   const spy200 = calcSMA(spyHistory, 200);
   const spyRSI = calcRSI(spyHistory, 14);
   const vixSlope = calcSlope(vixHistory, 5);
-  const vixLevel = Math.round((vixQ.price || 20) * 100) / 100;
-  const tnxLevel = Math.round((tnx.price || 4.5) * 100) / 100;
-  const dxyPrice = Math.round((dxy.price || 104) * 100) / 100;
-  const spyPrice = spy.price || (spyHistory[spyHistory.length - 1] || 500);
-  const qqqPrice = qqq.price || 0;
-
-  // Use v7 quote API change % for accuracy (matches Yahoo Finance website)
+  // vixLevel, tnxLevel, dxyPrice now set from v7 above
+  // v7 as single source of truth for display price + change
+  const spyPrice = v7Quotes['SPY']?.price ?? spy.price ?? (spyHistory[spyHistory.length - 1] || 500);
+  const qqqPrice = v7Quotes['QQQ']?.price ?? qqq.price ?? 0;
+  const vixLevel = v7Quotes['^VIX']?.price ?? Math.round((vixQ.price || 20) * 100) / 100;
+  const dxyPrice = v7Quotes['DX-Y.NYB']?.price ?? Math.round((dxy.price || 104) * 100) / 100;
+  const tnxLevel = v7Quotes['^TNX']?.price ?? Math.round((tnx.price || 4.5) * 100) / 100;
   const spyChgPct = v7Quotes['SPY']?.changePct ?? spy.changePct ?? 0;
   const qqqChgPct = v7Quotes['QQQ']?.changePct ?? qqq.changePct ?? 0;
   const vixChgPct = v7Quotes['^VIX']?.changePct ?? vixQ.changePct ?? 0;
@@ -502,7 +503,7 @@ async function fetchStockData(symbol, spyHistory, wlV7Quotes) {
     ]);
     if (!quote || history.length < 20) return null;
 
-    const price = quote.price;
+    const price = (wlV7Quotes && wlV7Quotes[symbol]?.price) ?? quote.price;
     // Use pre-fetched v7 changePct for accuracy (matches Yahoo website)
     const changePct = (wlV7Quotes && wlV7Quotes[symbol]?.changePct) ?? quote.changePct;
     const ma20 = calcSMA(history, 20);
