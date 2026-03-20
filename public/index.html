@@ -604,9 +604,9 @@ function renderAll(d){
   document.getElementById('ringNum').style.color=color;
   drawRing(scores.total,color,isNoTrade);
   var spyChg=d.spy.chg||0;
+  var spyDollar=d.spy.dollar!=null?d.spy.dollar:Math.round(d.spy.price*(spyChg/100)*100)/100;
   document.getElementById('spyPriceLabel').textContent='$'+d.spy.price.toFixed(2);
   var chgEl=document.getElementById('spyChgLabel');
-  var spyDollar=Math.round(d.spy.price*(spyChg/100)*100)/100;
   chgEl.textContent=(spyChg>=0?'+':'')+spyChg.toFixed(2)+'% '+(spyDollar>=0?'+':'')+spyDollar.toFixed(2);
   chgEl.style.color=spyChg>=0?'var(--green)':'var(--red)';
   var ec=scoreColor(scores.exec);
@@ -707,7 +707,7 @@ async function fetchData(){
   document.getElementById('errArea').innerHTML='';
   try{
     var ctrl=new AbortController(),tid=setTimeout(function(){ctrl.abort();},12000);
-    var res=await fetch(API_URL,{signal:ctrl.signal});clearTimeout(tid);
+    var res=await fetch(API_URL+'?t='+Date.now(),{signal:ctrl.signal,cache:'no-store'});clearTimeout(tid);
     if(!res.ok)throw new Error('HTTP '+res.status);
     var data=await res.json();if(data.error)throw new Error(data.error);
     lastData=data;renderAll(data);secondsSince=0;
@@ -837,7 +837,11 @@ function renderWatchlist(stocks) {
           '<div class="sc-sym">'+s.symbol+'</div>' +
           '<div style="display:flex;align-items:center;gap:8px;margin-top:2px;">' +
             '<span class="sc-price">$'+s.price.toFixed(2)+'</span>' +
-            '<span class="sc-chg" style="color:'+chgColor+'">'+chgSign+s.changePct.toFixed(2)+'% '+chgSign+(Math.abs(Math.round(s.price*(s.changePct/100)*100)/100)).toFixed(2)+'</span>' +
+            (function(){
+              var dollarChg=s.change!=null?s.change:Math.round(s.price*(s.changePct/100)*100)/100;
+              var dollarSign=dollarChg>=0?'+':'';
+              return '<span class="sc-chg" style="color:'+chgColor+'">'+(s.changePct>=0?'+':'')+s.changePct.toFixed(2)+'% '+dollarSign+dollarChg.toFixed(2)+'</span>';
+            })() +
           '</div>' +
         '</div>' +
         '<span class="sc-verdict '+s.verdict+'">'+s.verdict+'</span>' +
@@ -879,15 +883,10 @@ async function loadWatchlist(force) {
   if (force) watchlistLoaded = false;
   document.getElementById('watchlistGrid').innerHTML = '<div class="wl-loading">Fetching stock data...</div>';
   try {
-    // Use watchlist data from market API if available
-    if (lastData && lastData.watchlist && !force) {
-      renderWatchlist(lastData.watchlist);
-      return;
-    }
     var wlUrl = API_URL.replace('/api/market', '/api/watchlist');
     var ctrl = new AbortController();
     var tid = setTimeout(function(){ ctrl.abort(); }, 20000);
-    var res = await fetch(wlUrl, { signal: ctrl.signal });
+    var res = await fetch(wlUrl+'?t='+Date.now(), { signal: ctrl.signal, cache: 'no-store' });
     clearTimeout(tid);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     var data = await res.json();
