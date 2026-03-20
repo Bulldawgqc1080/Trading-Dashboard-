@@ -350,7 +350,7 @@ function addToScoreHistory(score, decision) {
 async function fetchV7Quotes(symbols) {
   try {
     const symStr = symbols.join(',');
-    const u = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symStr}&fields=regularMarketPrice,regularMarketChangePercent,regularMarketChange,regularMarketPreviousClose`;
+    const u = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symStr}&fields=regularMarketPrice,regularMarketChangePercent,regularMarketChange,regularMarketPreviousClose,marketState`;
     const data = await httpsGet(u);
     const results = data?.quoteResponse?.result || [];
     const map = {};
@@ -360,7 +360,8 @@ async function fetchV7Quotes(symbols) {
         price: Math.round((q.regularMarketPrice || 0) * 100) / 100,
         changePct: Math.round((q.regularMarketChangePercent || 0) * 100) / 100,
         change: Math.round((q.regularMarketChange || 0) * 100) / 100,
-        prev: Math.round((q.regularMarketPreviousClose || 0) * 100) / 100
+        prev: Math.round((q.regularMarketPreviousClose || 0) * 100) / 100,
+        marketState: q.marketState || 'REGULAR'
       };
     });
     return map;
@@ -414,7 +415,7 @@ async function buildMarketData() {
 
   const sectors = sectorSyms.map((sym, i) => ({
     sym, name: sectorNames[sym],
-    price: sectorResults[i]?.price || 0,
+    price: v7Quotes[sym]?.price ?? sectorResults[i]?.price ?? 0,
     chg: Math.round((v7Quotes[sym]?.changePct ?? sectorResults[i]?.changePct ?? 0) * 100) / 100,
     score: Math.min(100, Math.max(0, Math.round(50 + (v7Quotes[sym]?.changePct ?? sectorResults[i]?.changePct ?? 0) * 10)))
   })).sort((a, b) => b.chg - a.chg);
@@ -450,6 +451,7 @@ async function buildMarketData() {
     fedStance: 'neutral', fomcDays, fomc72hr: fomcDays <= 3,
     marketOpen: marketStatus.open, marketStatus: marketStatus.label,
     feedHealth, feedQuality, sectors, scoreHistory,
+    marketState: v7Quotes['SPY']?.marketState || 'REGULAR',
     lastUpdated: new Date().toISOString(),
     dataSource: 'Yahoo Finance (live)'
   };
