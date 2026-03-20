@@ -397,17 +397,37 @@ async function buildMarketData() {
   const spyRSI = calcRSI(spyHistory, 14);
   const vixSlope = calcSlope(vixHistory, 5);
   // vixLevel, tnxLevel, dxyPrice now set from v7 above
-  // v7 as single source of truth for display price + change
-  const spyPrice = v7Quotes['SPY']?.price ?? spy.price ?? (spyHistory[spyHistory.length - 1] || 500);
-  const qqqPrice = v7Quotes['QQQ']?.price ?? qqq.price ?? 0;
-  const vixLevel = v7Quotes['^VIX']?.price ?? Math.round((vixQ.price || 20) * 100) / 100;
-  const dxyPrice = v7Quotes['DX-Y.NYB']?.price ?? Math.round((dxy.price || 104) * 100) / 100;
-  const tnxLevel = v7Quotes['^TNX']?.price ?? Math.round((tnx.price || 4.5) * 100) / 100;
-  const spyChgPct = v7Quotes['SPY']?.changePct ?? spy.changePct ?? 0;
-  const qqqChgPct = v7Quotes['QQQ']?.changePct ?? qqq.changePct ?? 0;
-  const vixChgPct = v7Quotes['^VIX']?.changePct ?? vixQ.changePct ?? 0;
-  const dxyChgPct = v7Quotes['DX-Y.NYB']?.changePct ?? dxy.changePct ?? 0;
-  const tnxChgPct = v7Quotes['^TNX']?.changePct ?? tnx.changePct ?? 0;
+  // v7 as single source of truth — anchor % to prev+change from same quote packet
+  const spyV7 = v7Quotes['SPY'] || {};
+  const spyPrice = spyV7.price ?? spy.price ?? (spyHistory[spyHistory.length - 1] || 500);
+  const spyPrev = spyV7.prev ?? 0;
+  const spyChg = spyV7.change ?? (spyPrev > 0 ? spyPrice - spyPrev : 0);
+  const spyChgPct = spyPrev > 0 ? (spyChg / spyPrev) * 100 : 0;
+
+  const qqqV7 = v7Quotes['QQQ'] || {};
+  const qqqPrice = qqqV7.price ?? qqq.price ?? 0;
+  const qqqPrev = qqqV7.prev ?? 0;
+  const qqqChg = qqqV7.change ?? (qqqPrev > 0 ? qqqPrice - qqqPrev : 0);
+  const qqqChgPct = qqqPrev > 0 ? (qqqChg / qqqPrev) * 100 : 0;
+
+  const vixV7 = v7Quotes['^VIX'] || {};
+  const vixLevel = vixV7.price ?? Math.round((vixQ.price || 20) * 100) / 100;
+  const vixPrev = vixV7.prev ?? 0;
+  const vixChg = vixV7.change ?? 0;
+  const vixChgPct = vixPrev > 0 ? (vixChg / vixPrev) * 100 : 0;
+
+  const dxyV7 = v7Quotes['DX-Y.NYB'] || {};
+  const dxyPrice = dxyV7.price ?? Math.round((dxy.price || 104) * 100) / 100;
+  const dxyPrev = dxyV7.prev ?? 0;
+  const dxyChg = dxyV7.change ?? 0;
+  const dxyChgPct = dxyPrev > 0 ? (dxyChg / dxyPrev) * 100 : 0;
+
+  const tnxV7 = v7Quotes['^TNX'] || {};
+  const tnxLevel = tnxV7.price ?? Math.round((tnx.price || 4.5) * 100) / 100;
+  const tnxPrev = tnxV7.prev ?? 0;
+  const tnxChg = tnxV7.change ?? 0;
+  const tnxChgPct = tnxPrev > 0 ? (tnxChg / tnxPrev) * 100 : 0;
+
 
   const sectorNames = { XLK:'Technology', XLF:'Financials', XLE:'Energy', XLV:'Health Care',
     XLI:'Industrials', XLY:'Cons Discret', XLP:'Cons Staples', XLU:'Utilities',
@@ -421,7 +441,7 @@ async function buildMarketData() {
   })).sort((a, b) => b.chg - a.chg);
 
   const sectorChanges = sectors.map(s => s.chg);
-  const breadth = estimateBreadth(spyChgPct || 0, sectorChanges);
+  const breadth = estimateBreadth(spyChgPct, sectorChanges);
   const tenYrTrend = calcTrend(tnxHistory, 3, 10);
   const dxyTrend = calcTrend(dxyHistory, 3, 10);
   const regime = (spyPrice > spy50 && spyPrice > spy200 && spyRSI > 45) ? 'uptrend'
@@ -431,8 +451,8 @@ async function buildMarketData() {
   const feedQuality = getFeedQuality();
 
   const marketData = {
-    spy: { price: Math.round(spyPrice * 100) / 100, chg: Math.round(spyChgPct * 100) / 100, dollar: v7Quotes['SPY']?.change ?? 0 },
-    qqq: { price: Math.round(qqqPrice * 100) / 100, chg: Math.round(qqqChgPct * 100) / 100, dollar: v7Quotes['QQQ']?.change ?? 0 },
+    spy: { price: Math.round(spyPrice * 100) / 100, chg: Math.round(spyChgPct * 100) / 100, dollar: Math.round(spyChg * 100) / 100, prev: Math.round(spyPrev * 100) / 100 },
+    qqq: { price: Math.round(qqqPrice * 100) / 100, chg: Math.round(qqqChgPct * 100) / 100, dollar: Math.round(qqqChg * 100) / 100, prev: Math.round(qqqPrev * 100) / 100 },
     vix: { price: vixLevel, chg: Math.round(vixChgPct * 100) / 100 },
     dxy: { price: dxyPrice, chg: Math.round(dxyChgPct * 100) / 100 },
     tnx: { price: tnxLevel, chg: Math.round(tnxChgPct * 100) / 100 },
@@ -502,9 +522,11 @@ async function fetchStockData(symbol, spyHistory, wlV7Quotes) {
     ]);
     if (!quote || history.length < 20) return null;
 
-    const price = (wlV7Quotes && wlV7Quotes[symbol]?.price) ?? quote.price;
-    // Use pre-fetched v7 changePct for accuracy (matches Yahoo website)
-    const changePct = (wlV7Quotes && wlV7Quotes[symbol]?.changePct) ?? quote.changePct;
+    const wlV7 = (wlV7Quotes && wlV7Quotes[symbol]) || {};
+    const price = wlV7.price ?? quote.price;
+    const wlPrev = wlV7.prev ?? 0;
+    const wlChg = wlV7.change ?? quote.change ?? 0;
+    const changePct = wlPrev > 0 ? (wlChg / wlPrev) * 100 : (wlV7.changePct ?? quote.changePct ?? 0);
     const ma20 = calcSMA(history, 20);
     const ma50 = calcSMA(history, 50) || (quoteMAs && quoteMAs.ma50) || null;
     const ma200 = calcSMA(history, 200) || (quoteMAs && quoteMAs.ma200) || null;
@@ -572,7 +594,7 @@ async function fetchStockData(symbol, spyHistory, wlV7Quotes) {
       symbol,
       price,
       changePct: Math.round(changePct * 100) / 100,
-      change: (wlV7Quotes && wlV7Quotes[symbol]?.change) ?? quote.change ?? 0,
+      change: Math.round(wlChg * 100) / 100,
       ma20: Math.round((ma20||0) * 100) / 100,
       ma50: Math.round((ma50||0) * 100) / 100,
       ma200: Math.round((ma200||0) * 100) / 100,
