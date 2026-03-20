@@ -650,6 +650,25 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (parsed.pathname === '/api/debug') {
+    try {
+      const u = 'https://query1.finance.yahoo.com/v7/finance/quote?symbols=SPY&fields=regularMarketPrice,regularMarketChangePercent,regularMarketChange,regularMarketPreviousClose';
+      const data = await httpsGet(u);
+      const q = data?.quoteResponse?.result?.[0] || {};
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        price: q.regularMarketPrice,
+        changePct: q.regularMarketChangePercent,
+        change: q.regularMarketChange,
+        prevClose: q.regularMarketPreviousClose,
+        calcPct: q.regularMarketPreviousClose > 0 ? ((q.regularMarketPrice - q.regularMarketPreviousClose) / q.regularMarketPreviousClose * 100) : null
+      }));
+    } catch(e) {
+      res.writeHead(500); res.end(JSON.stringify({error: e.message}));
+    }
+    return;
+  }
+
   if (parsed.pathname === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', uptime: process.uptime(), feedHealth }));
