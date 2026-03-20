@@ -205,6 +205,10 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
 .wl-loading{padding:40px;text-align:center;color:var(--text3);font-size:11px;}
 .wl-header{padding:12px 14px 0;display:flex;align-items:center;justify-content:space-between;}
 .wl-refresh{background:var(--bg3);border:1px solid var(--border2);color:var(--blue);font-family:var(--mono);font-size:10px;padding:3px 9px;cursor:pointer;border-radius:2px;}
+.ext-badge{font-size:9px;padding:1px 6px;border-radius:2px;font-weight:600;letter-spacing:0.5px;}
+.ext-badge.pre{color:var(--amber);background:rgba(255,171,64,.1);border:1px solid rgba(255,171,64,.25);}
+.ext-badge.post{color:var(--blue);background:rgba(64,196,255,.1);border:1px solid rgba(64,196,255,.25);}
+.ext-row{display:flex;align-items:center;gap:5px;font-size:10px;margin-top:2px;}
 @media(max-width:700px){.watchlist-grid{grid-template-columns:1fr;}}
 .sc-signal{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:2px;border:1px solid;}
 .sc-signal.hold{background:rgba(0,230,118,.05);border-color:rgba(0,230,118,.2);color:var(--green);}
@@ -251,6 +255,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
         <div class="should-label">should i trade?</div>
         <div class="decision-badge CAUTION" id="decisionBadge">···</div>
         <div class="spy-price">SPY <span id="spyPriceLabel">—</span> <span id="spyChgLabel" style="font-size:10px;"></span></div>
+        <div id="spyExtLabel" class="ext-row" style="display:none;"></div>
         <div class="ring-wrap">
           <canvas id="ringCanvas" width="96" height="96"></canvas>
           <div class="ring-center">
@@ -609,6 +614,18 @@ function renderAll(d){
   var chgEl=document.getElementById('spyChgLabel');
   chgEl.textContent=(spyChg>=0?'+':'')+spyChg.toFixed(2)+'% '+(spyDollar>=0?'+':'')+spyDollar.toFixed(2);
   chgEl.style.color=spyChg>=0?'var(--green)':'var(--red)';
+  // Extended hours badge
+  var extEl=document.getElementById('spyExtLabel');
+  if(extEl){
+    if(d.spy.extType&&d.spy.extChangePct!=null){
+      var extSign=d.spy.extChangePct>=0?'+':'';
+      var extColor=d.spy.extChangePct>=0?'var(--green)':'var(--red)';
+      extEl.innerHTML='<span class="ext-badge '+(d.spy.extType==='PRE'?'pre':'post')+'">'+d.spy.extType+'</span><span style="color:'+extColor+';font-size:10px;">'+extSign+d.spy.extChangePct.toFixed(2)+'%</span>';
+      extEl.style.display='flex';
+    } else {
+      extEl.style.display='none';
+    }
+  }
   var ec=scoreColor(scores.exec);
   document.getElementById('execNum').textContent=scores.exec;
   document.getElementById('execNum').style.color=ec;
