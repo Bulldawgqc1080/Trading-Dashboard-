@@ -110,7 +110,7 @@ async function fetchSingleQuote(symbol, feedKey) {
     const closes = result.indicators?.quote?.[0]?.close || [];
     const validCloses = closes.filter(c => c !== null && !isNaN(c));
     const price = meta.regularMarketPrice || validCloses[validCloses.length - 1] || 0;
-    const prev = meta.chartPreviousClose || meta.previousClose || validCloses[validCloses.length - 2] || price;
+    const prev = meta.regularMarketPreviousClose || meta.chartPreviousClose || meta.previousClose || validCloses[validCloses.length - 2] || price;
     const change = price - prev;
     const changePct = prev > 0 ? (change / prev) * 100 : 0;
     const ma200raw = meta.twoHundredDayAverage || meta.regularMarketDayLow || 0;
@@ -340,14 +340,19 @@ function addToScoreHistory(score, decision) {
 async function fetchV7Quotes(symbols) {
   try {
     const symStr = symbols.join(',');
-    const u = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symStr}&fields=regularMarketPrice,regularMarketChangePercent,regularMarketChange`;
+    const u = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symStr}&fields=regularMarketPrice,regularMarketChangePercent,regularMarketChange,regularMarketPreviousClose`;
     const data = await httpsGet(u);
     const results = data?.quoteResponse?.result || [];
     const map = {};
     results.forEach(q => {
+      // Calculate pct from price and prev close for maximum accuracy
+      const price = q.regularMarketPrice || 0;
+      const prev = q.regularMarketPreviousClose || 0;
+      const calcPct = prev > 0 ? ((price - prev) / prev) * 100 : (q.regularMarketChangePercent || 0);
       map[q.symbol] = {
-        changePct: Math.round((q.regularMarketChangePercent || 0) * 100) / 100,
-        change: Math.round((q.regularMarketChange || 0) * 100) / 100
+        changePct: Math.round(calcPct * 100) / 100,
+        change: Math.round((q.regularMarketChange || 0) * 100) / 100,
+        prev: Math.round(prev * 100) / 100
       };
     });
     return map;
