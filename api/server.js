@@ -652,16 +652,25 @@ const server = http.createServer(async (req, res) => {
 
   if (parsed.pathname === '/api/debug') {
     try {
-      const u = 'https://query1.finance.yahoo.com/v7/finance/quote?symbols=SPY&fields=regularMarketPrice,regularMarketChangePercent,regularMarketChange,regularMarketPreviousClose';
+      const period2 = Math.floor(Date.now() / 1000);
+      const period1 = period2 - (5 * 24 * 3600);
+      const u = `https://query1.finance.yahoo.com/v8/finance/chart/SPY?period1=${period1}&period2=${period2}&interval=1d&includePrePost=false`;
       const data = await httpsGet(u);
-      const q = data?.quoteResponse?.result?.[0] || {};
+      const result = data?.chart?.result?.[0];
+      const meta = result?.meta || {};
+      const closes = result?.indicators?.quote?.[0]?.close || [];
+      const validCloses = closes.filter(c => c !== null && !isNaN(c));
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
-        price: q.regularMarketPrice,
-        changePct: q.regularMarketChangePercent,
-        change: q.regularMarketChange,
-        prevClose: q.regularMarketPreviousClose,
-        calcPct: q.regularMarketPreviousClose > 0 ? ((q.regularMarketPrice - q.regularMarketPreviousClose) / q.regularMarketPreviousClose * 100) : null
+        metaKeys: Object.keys(meta),
+        regularMarketPrice: meta.regularMarketPrice,
+        chartPreviousClose: meta.chartPreviousClose,
+        previousClose: meta.previousClose,
+        regularMarketPreviousClose: meta.regularMarketPreviousClose,
+        lastClose: validCloses[validCloses.length-1],
+        secondLastClose: validCloses[validCloses.length-2],
+        closeCount: validCloses.length,
+        allCloses: validCloses.slice(-3)
       }));
     } catch(e) {
       res.writeHead(500); res.end(JSON.stringify({error: e.message}));
