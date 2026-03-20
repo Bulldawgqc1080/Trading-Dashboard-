@@ -388,6 +388,13 @@ async function buildMarketData() {
   const spyPrice = spy.price || (spyHistory[spyHistory.length - 1] || 500);
   const qqqPrice = qqq.price || 0;
 
+  // Use v7 quote API change % for accuracy (matches Yahoo Finance website)
+  const spyChgPct = v7Quotes['SPY']?.changePct ?? spy.changePct ?? 0;
+  const qqqChgPct = v7Quotes['QQQ']?.changePct ?? qqq.changePct ?? 0;
+  const vixChgPct = v7Quotes['^VIX']?.changePct ?? vixQ.changePct ?? 0;
+  const dxyChgPct = v7Quotes['DX-Y.NYB']?.changePct ?? dxy.changePct ?? 0;
+  const tnxChgPct = v7Quotes['^TNX']?.changePct ?? tnx.changePct ?? 0;
+
   const sectorNames = { XLK:'Technology', XLF:'Financials', XLE:'Energy', XLV:'Health Care',
     XLI:'Industrials', XLY:'Cons Discret', XLP:'Cons Staples', XLU:'Utilities',
     XLB:'Materials', XLRE:'Real Estate', XLC:'Comm Services' };
