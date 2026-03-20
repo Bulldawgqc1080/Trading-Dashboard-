@@ -356,11 +356,12 @@ async function fetchV7Quotes(symbols) {
     const map = {};
     results.forEach(q => {
       // Calculate pct from price and prev close for maximum accuracy
+      const n = v => Number.isFinite(v) ? Math.round(v * 100) / 100 : null;
       map[q.symbol] = {
-        price: Math.round((q.regularMarketPrice || 0) * 100) / 100,
-        changePct: Math.round((q.regularMarketChangePercent || 0) * 100) / 100,
-        change: Math.round((q.regularMarketChange || 0) * 100) / 100,
-        prev: Math.round((q.regularMarketPreviousClose || 0) * 100) / 100,
+        price: n(q.regularMarketPrice),
+        changePct: n(q.regularMarketChangePercent),
+        change: n(q.regularMarketChange),
+        prev: n(q.regularMarketPreviousClose),
         marketState: q.marketState || 'REGULAR'
       };
     });
@@ -400,32 +401,32 @@ async function buildMarketData() {
   // v7 as single source of truth — anchor % to prev+change from same quote packet
   const spyV7 = v7Quotes['SPY'] || {};
   const spyPrice = spyV7.price ?? spy.price ?? (spyHistory[spyHistory.length - 1] || 500);
-  const spyPrev = spyV7.prev ?? 0;
+  const spyPrev = spyV7.prev ?? spy.prev ?? 0;
   const spyChg = spyV7.change ?? (spyPrev > 0 ? spyPrice - spyPrev : 0);
   const spyChgPct = spyPrev > 0 ? (spyChg / spyPrev) * 100 : 0;
 
   const qqqV7 = v7Quotes['QQQ'] || {};
   const qqqPrice = qqqV7.price ?? qqq.price ?? 0;
-  const qqqPrev = qqqV7.prev ?? 0;
+  const qqqPrev = qqqV7.prev ?? qqq.prev ?? 0;
   const qqqChg = qqqV7.change ?? (qqqPrev > 0 ? qqqPrice - qqqPrev : 0);
   const qqqChgPct = qqqPrev > 0 ? (qqqChg / qqqPrev) * 100 : 0;
 
   const vixV7 = v7Quotes['^VIX'] || {};
   const vixLevel = vixV7.price ?? Math.round((vixQ.price || 20) * 100) / 100;
-  const vixPrev = vixV7.prev ?? 0;
-  const vixChg = vixV7.change ?? 0;
+  const vixPrev = vixV7.prev ?? vixQ.prev ?? 0;
+  const vixChg = vixV7.change ?? (vixPrev > 0 ? vixLevel - vixPrev : 0);
   const vixChgPct = vixPrev > 0 ? (vixChg / vixPrev) * 100 : 0;
 
   const dxyV7 = v7Quotes['DX-Y.NYB'] || {};
   const dxyPrice = dxyV7.price ?? Math.round((dxy.price || 104) * 100) / 100;
-  const dxyPrev = dxyV7.prev ?? 0;
-  const dxyChg = dxyV7.change ?? 0;
+  const dxyPrev = dxyV7.prev ?? dxy.prev ?? 0;
+  const dxyChg = dxyV7.change ?? (dxyPrev > 0 ? dxyPrice - dxyPrev : 0);
   const dxyChgPct = dxyPrev > 0 ? (dxyChg / dxyPrev) * 100 : 0;
 
   const tnxV7 = v7Quotes['^TNX'] || {};
   const tnxLevel = tnxV7.price ?? Math.round((tnx.price || 4.5) * 100) / 100;
-  const tnxPrev = tnxV7.prev ?? 0;
-  const tnxChg = tnxV7.change ?? 0;
+  const tnxPrev = tnxV7.prev ?? tnx.prev ?? 0;
+  const tnxChg = tnxV7.change ?? (tnxPrev > 0 ? tnxLevel - tnxPrev : 0);
   const tnxChgPct = tnxPrev > 0 ? (tnxChg / tnxPrev) * 100 : 0;
 
 
@@ -524,8 +525,8 @@ async function fetchStockData(symbol, spyHistory, wlV7Quotes) {
 
     const wlV7 = (wlV7Quotes && wlV7Quotes[symbol]) || {};
     const price = wlV7.price ?? quote.price;
-    const wlPrev = wlV7.prev ?? 0;
-    const wlChg = wlV7.change ?? quote.change ?? 0;
+    const wlPrev = wlV7.prev ?? quote.prev ?? 0;
+    const wlChg = wlV7.change ?? quote.change ?? (wlPrev > 0 ? price - wlPrev : 0);
     const changePct = wlPrev > 0 ? (wlChg / wlPrev) * 100 : (wlV7.changePct ?? quote.changePct ?? 0);
     const ma20 = calcSMA(history, 20);
     const ma50 = calcSMA(history, 50) || (quoteMAs && quoteMAs.ma50) || null;
