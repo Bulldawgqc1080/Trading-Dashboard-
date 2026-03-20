@@ -356,9 +356,6 @@ async function fetchV7Quotes(symbols) {
     const map = {};
     results.forEach(q => {
       // Calculate pct from price and prev close for maximum accuracy
-      const price = q.regularMarketPrice || 0;
-      const prev = q.regularMarketPreviousClose || 0;
-      const calcPct = prev > 0 ? ((price - prev) / prev) * 100 : (q.regularMarketChangePercent || 0);
       map[q.symbol] = {
         price: Math.round((q.regularMarketPrice || 0) * 100) / 100,
         changePct: Math.round((q.regularMarketChangePercent || 0) * 100) / 100,
