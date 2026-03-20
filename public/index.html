@@ -561,7 +561,10 @@ function renderAll(d){
 
   // Market status
   var mktEl=document.getElementById('mktStatus');
-  mktEl.textContent=d.marketOpen?'MARKET OPEN':(d.marketStatus||'CLOSED');
+  var mktState=d.marketState||'REGULAR';
+  var isExtended=mktState==='PRE'||mktState==='PREPRE'||mktState==='POST'||mktState==='POSTPOST';
+  var mktLabel=d.marketOpen?'MARKET OPEN':isExtended?(mktState==='PRE'||mktState==='PREPRE'?'PRE-MARKET':'AFTER-HOURS'):(d.marketStatus||'CLOSED');
+  mktEl.textContent=mktLabel;
   mktEl.className='mkt-status '+(d.marketOpen?'open':'closed');
   var closedArea=document.getElementById('mktClosedArea');
   if(!d.marketOpen)closedArea.innerHTML='<div class="mkt-closed-banner">🕐 '+(d.marketStatus||'MARKET CLOSED')+' — Displaying last session data. Scores reflect prior close conditions.</div>';
