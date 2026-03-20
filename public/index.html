@@ -580,12 +580,17 @@ function renderAll(d){
   else{dot.className='live-dot';lbl.className='live-lbl ok';lbl.textContent='LIVE';}
 
   // Ticker
-  var items=[{sym:'SPY',val:d.spy.price.toFixed(2),chg:d.spy.chg},{sym:'QQQ',val:d.qqq.price.toFixed(2),chg:d.qqq.chg},
-    {sym:'VIX',val:d.vixLevel.toFixed(2),chg:d.vix.chg},{sym:'DXY',val:d.dxy.price.toFixed(2),chg:d.dxy.chg},
-    {sym:'10Y',val:d.tenYrLevel.toFixed(2)+'%',chg:d.tnx.chg}].concat(d.sectors.slice(0,5).map(function(s){return{sym:s.sym,val:s.chg.toFixed(2)+'%',chg:s.chg};}));
+  var items=[{sym:'SPY',val:d.spy.price.toFixed(2),chg:d.spy.chg,price:d.spy.price},{sym:'QQQ',val:d.qqq.price.toFixed(2),chg:d.qqq.chg,price:d.qqq.price},
+    {sym:'VIX',val:d.vixLevel.toFixed(2),chg:d.vix.chg},{sym:'DXY',val:d.dxy.price.toFixed(2),chg:d.dxy.chg,price:d.dxy.price},
+    {sym:'10Y',val:d.tenYrLevel.toFixed(2)+'%',chg:d.tnx.chg}].concat(d.sectors.slice(0,5).map(function(s){return{sym:s.sym,val:s.chg.toFixed(2)+'%',chg:s.chg,price:s.price};}));
   document.getElementById('ticker').innerHTML=items.concat(items).map(function(it){
     var cls=it.chg>0?'up':it.chg<0?'dn':'fl',arrow=it.chg>0?'▲':it.chg<0?'▼':'→',sign=it.chg>0?'+':'';
-    return '<span class="ti"><span class="sym">'+it.sym+'</span><span class="val '+cls+'">'+it.val+'</span><span class="'+cls+'">'+arrow+sign+it.chg.toFixed(2)+'</span></span><span class="sep">|</span>';
+    var dollarStr='';
+    if(it.price&&it.chg!==undefined){
+      var dollarChg=Math.round(it.price*(it.chg/100)*100)/100;
+      dollarStr=' <span class="'+cls+'">'+(dollarChg>=0?'+':'')+dollarChg.toFixed(2)+'</span>';
+    }
+    return '<span class="ti"><span class="sym">'+it.sym+'</span><span class="val '+cls+'">'+it.val+'</span><span class="'+cls+'">'+arrow+sign+it.chg.toFixed(2)+'%</span>'+dollarStr+'</span><span class="sep">|</span>';
   }).join('');
 
   // Hero
@@ -598,7 +603,8 @@ function renderAll(d){
   var spyChg=d.spy.chg||0;
   document.getElementById('spyPriceLabel').textContent='$'+d.spy.price.toFixed(2);
   var chgEl=document.getElementById('spyChgLabel');
-  chgEl.textContent=(spyChg>=0?'+':'')+spyChg.toFixed(2)+'%';
+  var spyDollar=Math.round(d.spy.price*(spyChg/100)*100)/100;
+  chgEl.textContent=(spyChg>=0?'+':'')+spyChg.toFixed(2)+'% '+(spyDollar>=0?'+':'')+spyDollar.toFixed(2);
   chgEl.style.color=spyChg>=0?'var(--green)':'var(--red)';
   var ec=scoreColor(scores.exec);
   document.getElementById('execNum').textContent=scores.exec;
@@ -828,7 +834,7 @@ function renderWatchlist(stocks) {
           '<div class="sc-sym">'+s.symbol+'</div>' +
           '<div style="display:flex;align-items:center;gap:8px;margin-top:2px;">' +
             '<span class="sc-price">$'+s.price.toFixed(2)+'</span>' +
-            '<span class="sc-chg" style="color:'+chgColor+'">'+chgSign+s.changePct.toFixed(2)+'%</span>' +
+            '<span class="sc-chg" style="color:'+chgColor+'">'+chgSign+s.changePct.toFixed(2)+'% '+chgSign+(Math.abs(Math.round(s.price*(s.changePct/100)*100)/100)).toFixed(2)+'</span>' +
           '</div>' +
         '</div>' +
         '<span class="sc-verdict '+s.verdict+'">'+s.verdict+'</span>' +
