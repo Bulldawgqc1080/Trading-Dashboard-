@@ -108,9 +108,19 @@ async function fetchSingleQuote(symbol, feedKey) {
     }
     const meta = result.meta || {};
     const closes = result.indicators?.quote?.[0]?.close || [];
+    const timestamps = result.timestamp || [];
     const validCloses = closes.filter(c => c !== null && !isNaN(c));
     const price = meta.regularMarketPrice || validCloses[validCloses.length - 1] || 0;
-    const prev = meta.regularMarketPreviousClose || meta.chartPreviousClose || meta.previousClose || validCloses[validCloses.length - 2] || price;
+    // Find yesterday's official close using timestamps to avoid including today's intraday
+    const todayTs = new Date(); todayTs.setHours(0,0,0,0);
+    const todayEpoch = todayTs.getTime() / 1000;
+    let prev = 0;
+    for (let i = timestamps.length - 1; i >= 0; i--) {
+      if (timestamps[i] < todayEpoch && closes[i] !== null && !isNaN(closes[i])) {
+        prev = closes[i]; break;
+      }
+    }
+    if (!prev) prev = meta.chartPreviousClose || validCloses[validCloses.length - 2] || price;
     const change = price - prev;
     const changePct = prev > 0 ? (change / prev) * 100 : 0;
     const ma200raw = meta.twoHundredDayAverage || meta.regularMarketDayLow || 0;
