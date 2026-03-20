@@ -431,8 +431,8 @@ async function buildMarketData() {
   const feedQuality = getFeedQuality();
 
   const marketData = {
-    spy: { price: Math.round(spyPrice * 100) / 100, chg: Math.round(spyChgPct * 100) / 100 },
-    qqq: { price: Math.round(qqqPrice * 100) / 100, chg: Math.round(qqqChgPct * 100) / 100 },
+    spy: { price: Math.round(spyPrice * 100) / 100, chg: Math.round(spyChgPct * 100) / 100, dollar: v7Quotes['SPY']?.change ?? 0 },
+    qqq: { price: Math.round(qqqPrice * 100) / 100, chg: Math.round(qqqChgPct * 100) / 100, dollar: v7Quotes['QQQ']?.change ?? 0 },
     vix: { price: vixLevel, chg: Math.round(vixChgPct * 100) / 100 },
     dxy: { price: dxyPrice, chg: Math.round(dxyChgPct * 100) / 100 },
     tnx: { price: tnxLevel, chg: Math.round(tnxChgPct * 100) / 100 },
@@ -572,6 +572,7 @@ async function fetchStockData(symbol, spyHistory, wlV7Quotes) {
       symbol,
       price,
       changePct: Math.round(changePct * 100) / 100,
+      change: (wlV7Quotes && wlV7Quotes[symbol]?.change) ?? quote.change ?? 0,
       ma20: Math.round((ma20||0) * 100) / 100,
       ma50: Math.round((ma50||0) * 100) / 100,
       ma200: Math.round((ma200||0) * 100) / 100,
@@ -633,6 +634,9 @@ const server = http.createServer(async (req, res) => {
   if (parsed.pathname === '/api/market') {
     try {
       const data = await getMarketData();
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(data));
     } catch (err) {
@@ -644,6 +648,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (parsed.pathname === '/api/journal') {
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ journal, count: journal.length }));
     return;
@@ -654,6 +661,9 @@ const server = http.createServer(async (req, res) => {
       // Use cached spy history if available
       const spyHist = await fetchYahooHistory('SPY', 220);
       const data = await getWatchlistData(spyHist);
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(data));
     } catch(err) {
@@ -664,6 +674,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (parsed.pathname === '/api/health') {
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', uptime: process.uptime(), feedHealth }));
     return;
