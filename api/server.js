@@ -99,7 +99,7 @@ async function fetchSingleQuote(symbol, feedKey) {
   try {
     const period2 = Math.floor(Date.now() / 1000);
     const period1 = period2 - (7 * 24 * 3600);
-    const u = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=1d&includePrePost=false&indicators=adjclose&events=div,splits`;
+    const u = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=1d&includePrePost=true&indicators=adjclose&events=div,splits`;
     const data = await httpsGet(u);
     const result = data?.chart?.result?.[0];
     if (!result) {
@@ -126,6 +126,17 @@ async function fetchSingleQuote(symbol, feedKey) {
     const ma200raw = meta.twoHundredDayAverage || meta.regularMarketDayLow || 0;
     const ma50raw = meta.fiftyDayAverage || 0;
     feedHealth[feedKey] = { status: 'ok', ts: Date.now(), latency: Date.now()-start, price };
+    // Extended hours from chart meta
+    const n2 = v => Number.isFinite(v) ? Math.round(v * 100) / 100 : null;
+    const postPrice = n2(meta.postMarketPrice);
+    const prePrice = n2(meta.preMarketPrice);
+    const hasPost = postPrice != null;
+    const hasPre = prePrice != null && !hasPost;
+    const extPrice = hasPost ? postPrice : hasPre ? prePrice : null;
+    const extChange = hasPost ? n2(meta.postMarketChange) : hasPre ? n2(meta.preMarketChange) : null;
+    const extChangePct = hasPost ? n2(meta.postMarketChangePercent) : hasPre ? n2(meta.preMarketChangePercent) : null;
+    const extType = hasPost ? 'POST' : hasPre ? 'PRE' : null;
+
     return {
       price: Math.round(price * 100) / 100,
       change: Math.round(change * 100) / 100,
@@ -133,7 +144,8 @@ async function fetchSingleQuote(symbol, feedKey) {
       prev: Math.round(prev * 100) / 100,
       ma200: Math.round(ma200raw * 100) / 100,
       ma50: Math.round(ma50raw * 100) / 100,
-      closes: validCloses
+      closes: validCloses,
+      extPrice, extChange, extChangePct, extType
     };
   } catch(e) {
     feedHealth[feedKey] = { status: 'error', error: e.message, ts: Date.now(), latency: Date.now()-start };
@@ -358,8 +370,8 @@ async function fetchV7Quotes(symbols) {
       // Calculate pct from price and prev close for maximum accuracy
       const n = v => Number.isFinite(v) ? Math.round(v * 100) / 100 : null;
       const state = q.marketState || 'REGULAR';
-      const isPre = state === 'PRE' || state === 'PREPRE';
-      const isPost = state === 'POST' || state === 'POSTPOST';
+      const isPre = state === 'PRE' || state === 'PREPRE' || (state === 'REGULAR' && Number.isFinite(q.preMarketPrice) && !Number.isFinite(q.postMarketPrice));
+      const isPost = state === 'POST' || state === 'POSTPOST' || (state === 'REGULAR' && Number.isFinite(q.postMarketPrice));
       map[q.symbol] = {
         price: n(q.regularMarketPrice),
         changePct: n(q.regularMarketChangePercent),
@@ -408,12 +420,21 @@ async function buildMarketData() {
   // v7 as single source of truth — anchor % to prev+change from same quote packet
   const spyV7 = v7Quotes['SPY'] || {};
   const spyPrice = spyV7.price ?? spy.price ?? (spyHistory[spyHistory.length - 1] || 500);
+  // AH/PRE fallback: use chart meta ext fields if v7 didn't return them
+  const spyExtPrice = spyV7.extPrice ?? (spy && Number.isFinite(spy.extPrice) ? spy.extPrice : null);
+  const spyExtChange = spyV7.extChange ?? (spy && Number.isFinite(spy.extChange) ? spy.extChange : null);
+  const spyExtChangePct = spyV7.extChangePct ?? (spy && Number.isFinite(spy.extChangePct) ? spy.extChangePct : null);
+  const spyExtType = spyV7.extType ?? spy.extType ?? null;
   const spyPrev = spyV7.prev ?? spy.prev ?? 0;
   const spyChg = spyV7.change ?? (spyPrev > 0 ? spyPrice - spyPrev : 0);
   const spyChgPct = spyPrev > 0 ? (spyChg / spyPrev) * 100 : 0;
 
   const qqqV7 = v7Quotes['QQQ'] || {};
   const qqqPrice = qqqV7.price ?? qqq.price ?? 0;
+  const qqqExtPrice = qqqV7.extPrice ?? (qqq && Number.isFinite(qqq.extPrice) ? qqq.extPrice : null);
+  const qqqExtChange = qqqV7.extChange ?? (qqq && Number.isFinite(qqq.extChange) ? qqq.extChange : null);
+  const qqqExtChangePct = qqqV7.extChangePct ?? (qqq && Number.isFinite(qqq.extChangePct) ? qqq.extChangePct : null);
+  const qqqExtType = qqqV7.extType ?? qqq.extType ?? null;
   const qqqPrev = qqqV7.prev ?? qqq.prev ?? 0;
   const qqqChg = qqqV7.change ?? (qqqPrev > 0 ? qqqPrice - qqqPrev : 0);
   const qqqChgPct = qqqPrev > 0 ? (qqqChg / qqqPrev) * 100 : 0;
@@ -459,8 +480,8 @@ async function buildMarketData() {
   const feedQuality = getFeedQuality();
 
   const marketData = {
-    spy: { price: Math.round(spyPrice * 100) / 100, chg: Math.round(spyChgPct * 100) / 100, dollar: Math.round(spyChg * 100) / 100, prev: Math.round(spyPrev * 100) / 100, extPrice: spyV7.extPrice, extChange: spyV7.extChange, extChangePct: spyV7.extChangePct, extType: spyV7.extType },
-    qqq: { price: Math.round(qqqPrice * 100) / 100, chg: Math.round(qqqChgPct * 100) / 100, dollar: Math.round(qqqChg * 100) / 100, prev: Math.round(qqqPrev * 100) / 100, extPrice: qqqV7.extPrice, extChange: qqqV7.extChange, extChangePct: qqqV7.extChangePct, extType: qqqV7.extType },
+    spy: { price: Math.round(spyPrice * 100) / 100, chg: Math.round(spyChgPct * 100) / 100, dollar: Math.round(spyChg * 100) / 100, prev: Math.round(spyPrev * 100) / 100, extPrice: spyExtPrice, extChange: spyExtChange, extChangePct: spyExtChangePct, extType: spyExtType },
+    qqq: { price: Math.round(qqqPrice * 100) / 100, chg: Math.round(qqqChgPct * 100) / 100, dollar: Math.round(qqqChg * 100) / 100, prev: Math.round(qqqPrev * 100) / 100, extPrice: qqqExtPrice, extChange: qqqExtChange, extChangePct: qqqExtChangePct, extType: qqqExtType },
     vix: { price: vixLevel, chg: Math.round(vixChgPct * 100) / 100 },
     dxy: { price: dxyPrice, chg: Math.round(dxyChgPct * 100) / 100 },
     tnx: { price: tnxLevel, chg: Math.round(tnxChgPct * 100) / 100 },
