@@ -7,6 +7,8 @@ const CACHE_TTL = 30000;
 const STALE_THRESHOLD = 5 * 60 * 1000;
 
 let cache = { data: null, ts: 0 };
+let cryptoCache = { data: null, ts: 0 };
+const CRYPTO_CACHE_TTL = 60000;
 let scoreHistory = [];
 let feedHealth = {};
 let journal = [];
@@ -388,6 +390,83 @@ async function fetchV7Quotes(symbols) {
   } catch(e) { return {}; }
 }
 
+async function fetchFearAndGreed() {
+  try {
+    const data = await httpsGet('https://api.alternative.me/fng/?limit=1');
+    const item = data?.data?.[0];
+    if (!item) return null;
+    return {
+      value: parseInt(item.value, 10),
+      label: item.value_classification,
+      ts: item.timestamp
+    };
+  } catch(e) { return null; }
+}
+
+async function fetchCryptoData() {
+  const now = Date.now();
+  if (cryptoCache.data && now - cryptoCache.ts < CRYPTO_CACHE_TTL) {
+    return { ...cryptoCache.data, cached: true };
+  }
+
+  const COINS = ['BTC-USD', 'ETH-USD', 'SOL-USD'];
+
+  try {
+    const [v7Data, fng] = await Promise.all([
+      fetchV7Quotes([...COINS, 'SPY']),
+      fetchFearAndGreed()
+    ]);
+
+    // Build coin cards
+    const coins = COINS.map(sym => {
+      const q = v7Data[sym] || {};
+      return {
+        symbol: sym.replace('-USD', ''),
+        price: q.price,
+        changePct: q.changePct,
+        change: q.change,
+        prev: q.prev,
+        marketState: q.marketState
+      };
+    });
+
+    // BTC dominance from CoinGecko
+    let btcDominance = null;
+    try {
+      const gcData = await httpsGet('https://api.coingecko.com/api/v3/global');
+      btcDominance = gcData?.data?.market_cap_percentage?.btc
+        ? Math.round(gcData.data.market_cap_percentage.btc * 10) / 10
+        : null;
+    } catch(e) {}
+
+    // SPY 20d correlation with BTC (simplified: compare direction of last 20d)
+    // Use changePct as a proxy since we don't store BTC history
+    const spyQ = v7Data['SPY'] || {};
+    const btcQ = v7Data['BTC-USD'] || {};
+    let correlation = null;
+    if (spyQ.changePct != null && btcQ.changePct != null) {
+      // Simple same-direction correlation for today
+      const sameDir = (spyQ.changePct >= 0) === (btcQ.changePct >= 0);
+      correlation = sameDir ? 'POSITIVE' : 'NEGATIVE';
+    }
+
+    const result = {
+      coins,
+      fearGreed: fng,
+      btcDominance,
+      spyCorrelation1d: correlation,
+      spyChg: spyQ.changePct,
+      lastUpdated: new Date().toISOString(),
+      cached: false
+    };
+
+    cryptoCache = { data: result, ts: now };
+    return result;
+  } catch(e) {
+    return cryptoCache.data ? { ...cryptoCache.data, cached: true } : null;
+  }
+}
+
 async function buildMarketData() {
   const sectorSyms = ['XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLU','XLB','XLRE','XLC'];
 
@@ -720,6 +799,25 @@ const server = http.createServer(async (req, res) => {
     } catch(err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  if (parsed.pathname === '/api/crypto') {
+    try {
+      const data = await fetchCryptoData();
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      if (!data) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'No crypto data available' }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(data));
+    } catch(e) {
+      res.writeHead(500); res.end(JSON.stringify({ error: e.message }));
     }
     return;
   }
