@@ -958,6 +958,38 @@ function fngColor(v) {
   return '#00e676';
 }
 
+function getCryptoSentiment(data) {
+  if (!data || !data.coins || !data.coins.length) return null;
+  var btc = data.coins.find(function(c){ return c.symbol === 'BTC'; }) || {};
+  var eth = data.coins.find(function(c){ return c.symbol === 'ETH'; }) || {};
+  var sol = data.coins.find(function(c){ return c.symbol === 'SOL'; }) || {};
+  var fng = data.fearGreed && Number.isFinite(data.fearGreed.value) ? data.fearGreed.value : null;
+  var dom = Number.isFinite(data.btcDominance) ? data.btcDominance : null;
+  var score = 50;
+  if (fng != null) {
+    if (fng <= 20) score -= 18;
+    else if (fng <= 35) score -= 10;
+    else if (fng <= 55) score += 0;
+    else if (fng <= 75) score += 8;
+    else score += 14;
+  }
+  var upCount = [btc,eth,sol].filter(function(c){ return (c.changePct || 0) > 0; }).length;
+  if (upCount === 3) score += 12;
+  else if (upCount === 2) score += 6;
+  else if (upCount === 1) score -= 4;
+  else score -= 10;
+  if (dom != null) {
+    if (dom > 58) score -= 6;
+    else if (dom < 48) score += 4;
+  }
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  var label, color;
+  if (score >= 70) { label = 'RISK-ON'; color = 'var(--green)'; }
+  else if (score >= 45) { label = 'NEUTRAL'; color = 'var(--amber)'; }
+  else { label = 'RISK-OFF'; color = 'var(--red)'; }
+  return { score: score, label: label, color: color, upCount: upCount };
+}
+
 function renderCrypto(d) {
   if (!d || !d.coins) {
     document.getElementById('cryptoContent').innerHTML = '<div class="wl-loading" style="color:var(--red);">No crypto data available.</div>';
@@ -1022,16 +1054,31 @@ function renderCrypto(d) {
   if (d.spyCorrelation1d) {
     var corrColor = d.spyCorrelation1d === 'POSITIVE' ? 'var(--green)' : 'var(--red)';
     metaHtml += '<div class="crypto-meta-box">' +
-      '<span class="crypto-meta-lbl">SPY vs BTC TODAY</span>' +
+      '<span class="crypto-meta-lbl">SPY ALIGNMENT (1D)</span>' +
       '<span class="crypto-meta-val" style="color:'+corrColor+'">'+d.spyCorrelation1d+'</span>' +
       '<span class="crypto-meta-sub">BTC & SPY moving '+(d.spyCorrelation1d==='POSITIVE'?'together':'opposite')+' today</span>' +
     '</div>';
   }
   metaHtml += '</div>';
 
+  var sentiment = getCryptoSentiment(d);
+  var sentimentHtml = '';
+  if (sentiment) {
+    sentimentHtml =
+      '<div class="crypto-meta-box" style="margin-top:2px;">' +
+        '<span class="crypto-meta-lbl">CRYPTO SENTIMENT (INFO ONLY)</span>' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+          '<span class="crypto-meta-val" style="color:'+sentiment.color+'">'+sentiment.score+'</span>' +
+          '<span style="font-size:11px;font-weight:700;color:'+sentiment.color+'">'+sentiment.label+'</span>' +
+        '</div>' +
+        '<div class="dp-bar-track"><div class="dp-bar-fill" style="width:'+sentiment.score+'%;background:'+sentiment.color+';"></div></div>' +
+        '<span class="crypto-meta-sub">Breadth: '+sentiment.upCount+'/3 coins green · informational only</span>' +
+      '</div>';
+  }
+
   var upd = d.lastUpdated ? 'fetched: ' + new Date(d.lastUpdated).toLocaleTimeString() : '';
   document.getElementById('cryptoContent').innerHTML =
-    coinsHtml + fngHtml + metaHtml +
+    coinsHtml + fngHtml + metaHtml + sentimentHtml +
     '<div style="font-size:9px;color:var(--text3);">'+upd+(d.cached?' (cached)':'')+'</div>';
 
   cryptoLoaded = true;
