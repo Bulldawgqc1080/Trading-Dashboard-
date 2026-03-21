@@ -217,6 +217,20 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
 .sc-signal-icon{font-size:13px;}
 .sc-signal-text{font-size:10px;font-weight:600;letter-spacing:1px;}
 .sc-signal-reason{font-size:9px;opacity:0.8;margin-left:4px;}
+.crypto-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;}
+.crypto-card{background:var(--bg2);border:1px solid var(--border);padding:16px;display:flex;flex-direction:column;gap:10px;}
+.crypto-sym{font-size:22px;font-weight:700;color:var(--text);}
+.crypto-price{font-size:20px;font-weight:600;}
+.crypto-chg{font-size:12px;}
+.fng-meter{background:var(--bg3);border:1px solid var(--border);padding:14px;border-radius:2px;}
+.fng-track{height:12px;background:var(--bg4);border-radius:6px;overflow:hidden;margin:8px 0;}
+.fng-fill{height:100%;border-radius:6px;transition:width .5s;}
+.crypto-meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.crypto-meta-box{background:var(--bg3);border:1px solid var(--border);padding:12px;display:flex;flex-direction:column;gap:4px;}
+.crypto-meta-lbl{font-size:9px;color:var(--text3);letter-spacing:1.5px;}
+.crypto-meta-val{font-size:18px;font-weight:700;}
+.crypto-meta-sub{font-size:10px;color:var(--text2);}
+@media(max-width:700px){.crypto-grid{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
@@ -240,6 +254,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
   <div class="tab-bar">
     <button class="tab-btn active" onclick="switchTab('market')">MARKET</button>
     <button class="tab-btn" onclick="switchTab('watchlist')">WATCHLIST</button>
+    <button class="tab-btn" onclick="switchTab('crypto')">CRYPTO</button>
   </div>
 
   <div id="tab-market" class="tab-content active">
@@ -342,6 +357,16 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
     </div>
     <div class="watchlist-grid" id="watchlistGrid">
       <div class="wl-loading">Loading stock data...</div>
+    </div>
+  </div>
+
+  <div id="tab-crypto" class="tab-content">
+    <div class="wl-header">
+      <span style="font-size:9px;color:var(--text3);letter-spacing:2px;">CRYPTO — BTC / ETH / SOL</span>
+      <button class="wl-refresh" onclick="loadCrypto(true)">⟳ REFRESH</button>
+    </div>
+    <div id="cryptoContent" style="padding:12px;display:flex;flex-direction:column;gap:12px;">
+      <div class="wl-loading">Loading crypto data...</div>
     </div>
   </div>
 
@@ -764,12 +789,14 @@ setInterval(function(){secondsSince++;document.getElementById('tsLabel').textCon
 
 // TAB SWITCHING
 var watchlistLoaded = false;
+var cryptoLoaded = false;
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
   document.querySelectorAll('.tab-content').forEach(function(t){ t.classList.remove('active'); });
   document.querySelector('.tab-btn[onclick*="'+tab+'"]').classList.add('active');
   document.getElementById('tab-'+tab).classList.add('active');
   if (tab === 'watchlist' && !watchlistLoaded) { loadWatchlist(false); }
+  if (tab === 'crypto' && !cryptoLoaded) { loadCrypto(false); }
 }
 
 // WATCHLIST
@@ -920,6 +947,110 @@ async function loadWatchlist(force) {
     renderWatchlist(data.stocks);
   } catch(err) {
     document.getElementById('watchlistGrid').innerHTML = '<div class="wl-loading" style="color:var(--red);">Failed to load: ' + err.message + '</div>';
+  }
+}
+// CRYPTO
+function fngColor(v) {
+  if (v <= 25) return '#ff5252';
+  if (v <= 45) return '#ff7043';
+  if (v <= 55) return '#ffab40';
+  if (v <= 75) return '#9ccc65';
+  return '#00e676';
+}
+
+function renderCrypto(d) {
+  if (!d || !d.coins) {
+    document.getElementById('cryptoContent').innerHTML = '<div class="wl-loading" style="color:var(--red);">No crypto data available.</div>';
+    return;
+  }
+
+  // Coin cards
+  var coinsHtml = '<div class="crypto-grid">' + d.coins.map(function(c) {
+    if (c.price == null) return '';
+    var chgColor = (c.changePct || 0) >= 0 ? 'var(--green)' : 'var(--red)';
+    var chgSign = (c.changePct || 0) >= 0 ? '+' : '';
+    var dollarSign = (c.change || 0) >= 0 ? '+' : '';
+    var priceStr = c.price >= 1000
+      ? '$' + c.price.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})
+      : '$' + c.price.toFixed(c.price >= 1 ? 2 : 4);
+    return '<div class="crypto-card">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+        '<span class="crypto-sym">'+c.symbol+'</span>' +
+        '<span style="font-size:9px;color:var(--text3);padding:2px 6px;border:1px solid var(--border);border-radius:2px;">CRYPTO</span>' +
+      '</div>' +
+      '<div style="display:flex;align-items:baseline;gap:10px;">' +
+        '<span class="crypto-price">'+priceStr+'</span>' +
+        '<span class="crypto-chg" style="color:'+chgColor+'">'+chgSign+(c.changePct||0).toFixed(2)+'% '+dollarSign+(c.change||0).toFixed(2)+'</span>' +
+      '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:3px;">' +
+        '<div style="display:flex;justify-content:space-between;font-size:10px;">' +
+          '<span style="color:var(--text3);">prev close</span>' +
+          '<span style="color:var(--text2);">$'+(c.prev ? c.prev.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—')+'</span>' +
+        '</div>' +
+        (d.spyCorrelation1d ? '<div style="display:flex;justify-content:space-between;font-size:10px;"><span style="color:var(--text3);">vs SPY today</span><span style="color:'+(d.spyCorrelation1d==='POSITIVE'?'var(--green)':'var(--red)')+'">'+d.spyCorrelation1d+'</span></div>' : '') +
+      '</div>' +
+    '</div>';
+  }).join('') + '</div>';
+
+  // Fear & Greed
+  var fngHtml = '';
+  if (d.fearGreed) {
+    var fv = d.fearGreed.value;
+    var fc = fngColor(fv);
+    fngHtml = '<div class="fng-meter">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">' +
+        '<span style="font-size:9px;color:var(--text3);letter-spacing:2px;">FEAR & GREED INDEX</span>' +
+        '<span style="font-size:18px;font-weight:700;color:'+fc+'">'+fv+'</span>' +
+      '</div>' +
+      '<div class="fng-track"><div class="fng-fill" style="width:'+fv+'%;background:'+fc+';"></div></div>' +
+      '<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3);">' +
+        '<span>EXTREME FEAR</span><span style="color:'+fc+';font-weight:600;">'+d.fearGreed.label.toUpperCase()+'</span><span>EXTREME GREED</span>' +
+      '</div>' +
+    '</div>';
+  }
+
+  // Meta boxes
+  var metaHtml = '<div class="crypto-meta-grid">';
+  if (d.btcDominance != null) {
+    var domColor = d.btcDominance > 55 ? 'var(--amber)' : 'var(--text)';
+    metaHtml += '<div class="crypto-meta-box">' +
+      '<span class="crypto-meta-lbl">BTC DOMINANCE</span>' +
+      '<span class="crypto-meta-val" style="color:'+domColor+'">'+d.btcDominance+'%</span>' +
+      '<span class="crypto-meta-sub">'+(d.btcDominance > 55 ? 'BTC leading — alts lagging' : d.btcDominance > 45 ? 'Balanced market' : 'Altcoin season')+'</span>' +
+    '</div>';
+  }
+  if (d.spyCorrelation1d) {
+    var corrColor = d.spyCorrelation1d === 'POSITIVE' ? 'var(--green)' : 'var(--red)';
+    metaHtml += '<div class="crypto-meta-box">' +
+      '<span class="crypto-meta-lbl">SPY vs BTC TODAY</span>' +
+      '<span class="crypto-meta-val" style="color:'+corrColor+'">'+d.spyCorrelation1d+'</span>' +
+      '<span class="crypto-meta-sub">BTC & SPY moving '+(d.spyCorrelation1d==='POSITIVE'?'together':'opposite')+' today</span>' +
+    '</div>';
+  }
+  metaHtml += '</div>';
+
+  var upd = d.lastUpdated ? 'fetched: ' + new Date(d.lastUpdated).toLocaleTimeString() : '';
+  document.getElementById('cryptoContent').innerHTML =
+    coinsHtml + fngHtml + metaHtml +
+    '<div style="font-size:9px;color:var(--text3);">'+upd+(d.cached?' (cached)':'')+'</div>';
+
+  cryptoLoaded = true;
+}
+
+async function loadCrypto(force) {
+  if (force) cryptoLoaded = false;
+  document.getElementById('cryptoContent').innerHTML = '<div class="wl-loading">Fetching crypto data...</div>';
+  try {
+    var cryptoUrl = API_URL.replace('/api/market', '/api/crypto');
+    var ctrl = new AbortController();
+    var tid = setTimeout(function(){ ctrl.abort(); }, 15000);
+    var res = await fetch(cryptoUrl + '?t=' + Date.now(), { signal: ctrl.signal, cache: 'no-store' });
+    clearTimeout(tid);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    renderCrypto(data);
+  } catch(err) {
+    document.getElementById('cryptoContent').innerHTML = '<div class="wl-loading" style="color:var(--red);">Failed: ' + err.message + '</div>';
   }
 }
 </script>
