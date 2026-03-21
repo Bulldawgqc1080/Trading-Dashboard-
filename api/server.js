@@ -417,18 +417,36 @@ async function fetchCryptoData() {
       fetchFearAndGreed()
     ]);
 
-    // Build coin cards
-    const coins = COINS.map(sym => {
+    // Build coin cards — fallback to fetchSingleQuote if v7 price is null
+    const coins = await Promise.all(COINS.map(async sym => {
       const q = v7Data[sym] || {};
+      let price = q.price;
+      let changePct = q.changePct;
+      let change = q.change;
+      let prev = q.prev;
+
+      // Fallback: fetch via chart API if v7 didn't return price
+      if (price == null) {
+        try {
+          const fallback = await fetchSingleQuote(sym, 'CRYPTO_' + sym.replace('-USD',''));
+          if (fallback && fallback.price) {
+            price = fallback.price;
+            changePct = fallback.changePct;
+            change = fallback.change;
+            prev = fallback.prev;
+          }
+        } catch(e) {}
+      }
+
       return {
         symbol: sym.replace('-USD', ''),
-        price: q.price,
-        changePct: q.changePct,
-        change: q.change,
-        prev: q.prev,
+        price,
+        changePct,
+        change,
+        prev,
         marketState: q.marketState
       };
-    });
+    }));
 
     // BTC dominance from CoinGecko
     let btcDominance = null;
