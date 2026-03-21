@@ -998,7 +998,7 @@ function renderCrypto(d) {
 
   // Coin cards
   var coinsHtml = '<div class="crypto-grid">' + d.coins.map(function(c) {
-    if (c.price == null) return '';
+    if (c.price == null) return '<div class="crypto-card"><div style="display:flex;align-items:center;justify-content:space-between;"><span class="crypto-sym">'+c.symbol+'</span></div><div style="font-size:10px;color:var(--text3);padding:8px 0;">Price unavailable — retrying next refresh</div></div>';
     var chgColor = (c.changePct || 0) >= 0 ? 'var(--green)' : 'var(--red)';
     var chgSign = (c.changePct || 0) >= 0 ? '+' : '';
     var dollarSign = (c.change || 0) >= 0 ? '+' : '';
