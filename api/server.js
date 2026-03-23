@@ -524,7 +524,8 @@ async function buildMarketData() {
   const spyExtType = spyV7.extType ?? spy.extType ?? null;
   const spyPrev = spyV7.prev ?? spy.prev ?? 0;
   const spyChg = spyV7.change ?? (spyPrev > 0 ? spyPrice - spyPrev : 0);
-  const spyChgPct = spyPrev > 0 ? (spyChg / spyPrev) * 100 : 0;
+  // Trust v7 changePct directly — most accurate, avoids rounding/prev issues
+  const spyChgPct = spyV7.changePct != null ? spyV7.changePct : (spyPrev > 0 ? (spyChg / spyPrev) * 100 : 0);
 
   const qqqV7 = v7Quotes['QQQ'] || {};
   const qqqPrice = qqqV7.price ?? qqq.price ?? 0;
@@ -534,25 +535,26 @@ async function buildMarketData() {
   const qqqExtType = qqqV7.extType ?? qqq.extType ?? null;
   const qqqPrev = qqqV7.prev ?? qqq.prev ?? 0;
   const qqqChg = qqqV7.change ?? (qqqPrev > 0 ? qqqPrice - qqqPrev : 0);
-  const qqqChgPct = qqqPrev > 0 ? (qqqChg / qqqPrev) * 100 : 0;
+  // Trust v7 changePct directly
+  const qqqChgPct = qqqV7.changePct != null ? qqqV7.changePct : (qqqPrev > 0 ? (qqqChg / qqqPrev) * 100 : 0);
 
   const vixV7 = v7Quotes['^VIX'] || {};
   const vixLevel = vixV7.price ?? Math.round((vixQ.price || 20) * 100) / 100;
   const vixPrev = vixV7.prev ?? vixQ.prev ?? 0;
   const vixChg = vixV7.change ?? (vixPrev > 0 ? vixLevel - vixPrev : 0);
-  const vixChgPct = vixPrev > 0 ? (vixChg / vixPrev) * 100 : 0;
+  const vixChgPct = vixV7.changePct != null ? vixV7.changePct : (vixPrev > 0 ? (vixChg / vixPrev) * 100 : 0);
 
   const dxyV7 = v7Quotes['DX-Y.NYB'] || {};
   const dxyPrice = dxyV7.price ?? Math.round((dxy.price || 104) * 100) / 100;
   const dxyPrev = dxyV7.prev ?? dxy.prev ?? 0;
   const dxyChg = dxyV7.change ?? (dxyPrev > 0 ? dxyPrice - dxyPrev : 0);
-  const dxyChgPct = dxyPrev > 0 ? (dxyChg / dxyPrev) * 100 : 0;
+  const dxyChgPct = dxyV7.changePct != null ? dxyV7.changePct : (dxyPrev > 0 ? (dxyChg / dxyPrev) * 100 : 0);
 
   const tnxV7 = v7Quotes['^TNX'] || {};
   const tnxLevel = tnxV7.price ?? Math.round((tnx.price || 4.5) * 100) / 100;
   const tnxPrev = tnxV7.prev ?? tnx.prev ?? 0;
   const tnxChg = tnxV7.change ?? (tnxPrev > 0 ? tnxLevel - tnxPrev : 0);
-  const tnxChgPct = tnxPrev > 0 ? (tnxChg / tnxPrev) * 100 : 0;
+  const tnxChgPct = tnxV7.changePct != null ? tnxV7.changePct : (tnxPrev > 0 ? (tnxChg / tnxPrev) * 100 : 0);
 
 
   const sectorNames = { XLK:'Technology', XLF:'Financials', XLE:'Energy', XLV:'Health Care',
