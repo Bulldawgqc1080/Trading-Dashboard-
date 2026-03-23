@@ -522,10 +522,12 @@ async function buildMarketData() {
   const spyExtChange = spyV7.extChange ?? (spy && Number.isFinite(spy.extChange) ? spy.extChange : null);
   const spyExtChangePct = spyV7.extChangePct ?? (spy && Number.isFinite(spy.extChangePct) ? spy.extChangePct : null);
   const spyExtType = spyV7.extType ?? spy.extType ?? null;
-  const spyPrev = spyV7.prev ?? spy.prev ?? 0;
+  // Use history array for prev close — avoids Yahoo's weekend/boundary stale prev bug
+  const histPrev = spyHistory.length >= 2 ? spyHistory[spyHistory.length - 2] : 0;
+  const spyPrev = (histPrev > 0 && Math.abs(spyPrice - histPrev) / histPrev < 0.10) ? histPrev : (spyV7.prev ?? spy.prev ?? 0);
   const spyChg = spyV7.change ?? (spyPrev > 0 ? spyPrice - spyPrev : 0);
-  // Trust v7 changePct directly — most accurate, avoids rounding/prev issues
-  const spyChgPct = spyV7.changePct != null ? spyV7.changePct : (spyPrev > 0 ? (spyChg / spyPrev) * 100 : 0);
+  // Compute pct from history-derived prev for accuracy, fall back to v7
+  const spyChgPct = spyPrev > 0 ? ((spyPrice - spyPrev) / spyPrev) * 100 : (spyV7.changePct ?? 0);
 
   const qqqV7 = v7Quotes['QQQ'] || {};
   const qqqPrice = qqqV7.price ?? qqq.price ?? 0;
@@ -533,10 +535,12 @@ async function buildMarketData() {
   const qqqExtChange = qqqV7.extChange ?? (qqq && Number.isFinite(qqq.extChange) ? qqq.extChange : null);
   const qqqExtChangePct = qqqV7.extChangePct ?? (qqq && Number.isFinite(qqq.extChangePct) ? qqq.extChangePct : null);
   const qqqExtType = qqqV7.extType ?? qqq.extType ?? null;
-  const qqqPrev = qqqV7.prev ?? qqq.prev ?? 0;
-  const qqqChg = qqqV7.change ?? (qqqPrev > 0 ? qqqPrice - qqqPrev : 0);
-  // Trust v7 changePct directly
-  const qqqChgPct = qqqV7.changePct != null ? qqqV7.changePct : (qqqPrev > 0 ? (qqqChg / qqqPrev) * 100 : 0);
+  // Use QQQ history for prev close too
+  const qqqHistory = await fetchYahooHistory('QQQ', 5);
+  const qqqHistPrev = qqqHistory.length >= 2 ? qqqHistory[qqqHistory.length - 2] : 0;
+  const qqqPrev = (qqqHistPrev > 0 && Math.abs(qqqPrice - qqqHistPrev) / qqqHistPrev < 0.10) ? qqqHistPrev : (qqqV7.prev ?? qqq.prev ?? 0);
+  const qqqChg = qqqPrice - qqqPrev;
+  const qqqChgPct = qqqPrev > 0 ? ((qqqPrice - qqqPrev) / qqqPrev) * 100 : (qqqV7.changePct ?? 0);
 
   const vixV7 = v7Quotes['^VIX'] || {};
   const vixLevel = vixV7.price ?? Math.round((vixQ.price || 20) * 100) / 100;
