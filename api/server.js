@@ -656,9 +656,13 @@ async function fetchStockData(symbol, spyHistory, wlV7Quotes) {
 
     const wlV7 = (wlV7Quotes && wlV7Quotes[symbol]) || {};
     const price = wlV7.price ?? quote.price;
-    const wlPrev = wlV7.prev ?? quote.prev ?? 0;
-    const wlChg = wlV7.change ?? quote.change ?? (wlPrev > 0 ? price - wlPrev : 0);
-    const changePct = wlPrev > 0 ? (wlChg / wlPrev) * 100 : (wlV7.changePct ?? quote.changePct ?? 0);
+    // Use history array for prev close — fixes Yahoo Monday boundary bug
+    const histPrevWl = history.length >= 2 ? history[history.length - 2] : 0;
+    const wlPrev = (histPrevWl > 0 && Math.abs(price - histPrevWl) / histPrevWl < 0.10)
+      ? histPrevWl
+      : (wlV7.prev ?? quote.prev ?? 0);
+    const wlChg = price - wlPrev;
+    const changePct = wlPrev > 0 ? ((price - wlPrev) / wlPrev) * 100 : (wlV7.changePct ?? quote.changePct ?? 0);
     const ma20 = calcSMA(history, 20);
     const ma50 = calcSMA(history, 50) || (quoteMAs && quoteMAs.ma50) || null;
     const ma200 = calcSMA(history, 200) || (quoteMAs && quoteMAs.ma200) || null;
