@@ -211,17 +211,23 @@ function estimateVixPercentile(vix) {
 }
 
 function estimateBreadth(spyChgPct, sectorChanges) {
+  // BREADTH PROXY — estimated from sector participation, not real exchange breadth
   const upSectors = sectorChanges.filter(c => c > 0).length;
   const breadthProxy = (upSectors / sectorChanges.length) * 100;
   const spyFactor = spyChgPct > 1 ? 15 : spyChgPct > 0.5 ? 8 : spyChgPct > 0 ? 3 : spyChgPct > -0.5 ? -5 : -12;
-  const pctAbove20 = Math.max(15, Math.min(85, breadthProxy + spyFactor));
-  const pctAbove50 = Math.max(10, Math.min(80, pctAbove20 - 5));
-  const pctAbove200 = Math.max(15, Math.min(75, pctAbove50 - 4));
+  // Fib-aligned breadth proxies: EMA21 / SMA89 / SMA233 participation estimates
+  const pctAboveEma21 = Math.max(15, Math.min(85, breadthProxy + spyFactor));
+  const pctAboveSma89 = Math.max(10, Math.min(80, pctAboveEma21 - 5));
+  const pctAboveSma233 = Math.max(15, Math.min(75, pctAboveSma89 - 4));
   const adRatio = Math.round((0.7 + (upSectors / sectorChanges.length) * 1.1) * 100) / 100;
   const nasdaqHL = Math.round(35 + (upSectors / sectorChanges.length) * 55);
-  return { pctAbove20: Math.round(pctAbove20), pctAbove50: Math.round(pctAbove50),
-    pctAbove200: Math.round(pctAbove200), adRatio, nasdaqHL,
-    mcclellan: Math.round((adRatio - 1) * 120) };
+  return {
+    pctAbove20: Math.round(pctAboveEma21),   // % est. above EMA 21
+    pctAbove50: Math.round(pctAboveSma89),   // % est. above SMA 89
+    pctAbove200: Math.round(pctAboveSma233), // % est. above SMA 233
+    adRatio, nasdaqHL,
+    mcclellan: Math.round((adRatio - 1) * 120)
+  };
 }
 
 function getFomcDays() {
@@ -315,10 +321,10 @@ function calcScoresServer(d) {
     { name: 'Elevated VIX', impact: -1, active: d.vixLevel > 25 },
     { name: 'VIX falling', impact: 1, active: d.vixSlope < -0.5 },
     { name: 'VIX rising', impact: -1, active: d.vixSlope > 0.5 },
-    { name: 'SPY above 200d MA', impact: 1, active: d.spyVs200 === 'above' },
-    { name: 'SPY below 200d MA', impact: -1, active: d.spyVs200 === 'below' },
-    { name: 'SPY above 50d MA', impact: 1, active: d.spyVs50 === 'above' },
-    { name: 'SPY below 50d MA', impact: -1, active: d.spyVs50 === 'below' },
+    { name: 'SPY above SMA 233', impact: 1, active: d.spyVs200 === 'above' },
+    { name: 'SPY below SMA 233', impact: -1, active: d.spyVs200 === 'below' },
+    { name: 'SPY above SMA 89', impact: 1, active: d.spyVs50 === 'above' },
+    { name: 'SPY below SMA 89', impact: -1, active: d.spyVs50 === 'below' },
     { name: 'Confirmed uptrend', impact: 1, active: d.regime === 'uptrend' },
     { name: 'Downtrend confirmed', impact: -1, active: d.regime === 'downtrend' },
     { name: 'Oversold RSI', impact: -1, active: d.spyRSI < 30 },
