@@ -808,7 +808,7 @@ function getSellSignal(s, marketDecision) {
 
   // Exit triggers (strongest)
   if (s.vs20 === 'below' && s.vs50 === 'below' && s.vs200 === 'below') {
-    triggers.push('Below all MAs'); level = 'exit';
+    triggers.push('Below EMA21/89/233'); level = 'exit';
   }
   if (s.rsi > 78) {
     triggers.push('RSI overbought ('+s.rsi+')'); level = 'exit';
@@ -823,7 +823,7 @@ function getSellSignal(s, marketDecision) {
   // Tighten stop triggers
   if (level === 'hold') {
     if (s.vs20 === 'below' && s.vs50 === 'above') {
-      triggers.push('Broke below 20d MA'); level = 'tighten';
+      triggers.push('Broke below EMA 21'); level = 'tighten';
     }
     if (s.rsi > 70 && s.rsi <= 78) {
       triggers.push('RSI extended ('+s.rsi+')'); level = 'tighten';
@@ -869,9 +869,10 @@ function renderWatchlist(stocks) {
     var rsBarLeft = s.relStrength >= 0 ? '50%' : (50 - rsBarPct) + '%';
 
     var metricsHtml = [
-      {k:'vs 20d MA', v:s.vs20.toUpperCase(), cls:s.vs20==='above'?'up':'dn'},
-      {k:'vs 50d MA', v:s.vs50.toUpperCase(), cls:s.vs50==='above'?'up':'dn'},
-      {k:'vs 200d MA', v:s.vs200.toUpperCase(), cls:s.vs200==='above'?'up':'dn'},
+      {k:'vs EMA 8', v:(s.vsEma8||'—').toUpperCase(), cls:s.vsEma8==='above'?'up':'dn'},
+      {k:'vs EMA 21', v:s.vs20.toUpperCase(), cls:s.vs20==='above'?'up':'dn'},
+      {k:'vs SMA 89', v:s.vs50.toUpperCase(), cls:s.vs50==='above'?'up':'dn'},
+      {k:'vs SMA 233', v:s.vs200.toUpperCase(), cls:s.vs200==='above'?'up':'dn'},
       {k:'RSI (14d)', v:s.rsi, cls:s.rsi>50&&s.rsi<70?'up':s.rsi>=70?'warn':'fl'},
       {k:'20d perf', v:(s.perf20d>=0?'+':'')+s.perf20d+'%', cls:s.perf20d>=0?'up':'dn'},
     ].map(function(m){
