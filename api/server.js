@@ -271,11 +271,14 @@ function calcScoresServer(d) {
   if (d.vixPercentile > 70) vix = Math.max(0, vix - 10);
 
   let trend = 0;
-  if (d.spyVs200 === 'above') trend += 30;
-  if (d.spyVs50 === 'above') trend += 25;
-  if (d.spyVs20 === 'above') trend += 20;
-  if (d.qqqVs50 === 'above') trend += 15;
+  if (d.spyVs200 === 'above') trend += 25;  // above SMA 233
+  if (d.spyVs50 === 'above') trend += 20;   // above SMA 89
+  if (d.spyVs20 === 'above') trend += 15;   // above EMA 21
+  if (d.qqqVs50 === 'above') trend += 15;   // QQQ above SMA 89
   if (d.regime === 'uptrend') trend += 10;
+  // Bonus: orderly MA stack (EMA21 > SMA89 > SMA233)
+  if (d.spyEma21AboveSma89) trend += 8;
+  if (d.spySma89AboveSma233) trend += 7;
   if (d.spyRSI > 30 && d.spyRSI < 70) trend = Math.min(100, trend + 8);
   if (d.spyRSI >= 75) trend = Math.max(0, trend - 12);
   if (d.spyRSI <= 25) trend = Math.max(0, trend - 18);
@@ -518,10 +521,18 @@ async function buildMarketData() {
   const dxy = dxyData || {};
   const tnx = tnxData || {};
 
-  const spy20 = calcSMA(spyHistory, 20);
-  const spy50 = calcSMA(spyHistory, 50);
-  const spy200 = calcSMA(spyHistory, 200);
+  // SPY trend structure — Fibonacci MA stack (permission model, not entry scoring)
+  const spyEma21 = calcEMA(spyHistory, 21);
+  const spySma89 = calcSMA(spyHistory, 89);
+  const spySma233 = calcSMA(spyHistory, 233);
+  // Keep legacy aliases for compatibility with return payload
+  const spy20 = spyEma21;
+  const spy50 = spySma89;
+  const spy200 = spySma233;
   const spyRSI = calcRSI(spyHistory, 14);
+  // SPY MA alignment flags (for trend scoring)
+  const spyEma21AboveSma89 = spyEma21 && spySma89 && spyEma21 > spySma89;
+  const spySma89AboveSma233 = spySma89 && spySma233 && spySma89 > spySma233;
   const vixSlope = calcSlope(vixHistory, 5);
   // vixLevel, tnxLevel, dxyPrice now set from v7 above
   // v7 as single source of truth — anchor % to prev+change from same quote packet
@@ -546,7 +557,8 @@ async function buildMarketData() {
   const qqqExtChangePct = qqqV7.extChangePct ?? (qqq && Number.isFinite(qqq.extChangePct) ? qqq.extChangePct : null);
   const qqqExtType = qqqV7.extType ?? qqq.extType ?? null;
   // Use QQQ history for prev close too
-  const qqqHistory = await fetchYahooHistory('QQQ', 5);
+  const qqqHistory = await fetchYahooHistory('QQQ', 100);
+  const qqqSma89 = calcSMA(qqqHistory, 89);
   const qqqHistPrev = qqqHistory.length >= 2 ? qqqHistory[qqqHistory.length - 2] : 0;
   const qqqPrev = (qqqHistPrev > 0 && Math.abs(qqqPrice - qqqHistPrev) / qqqHistPrev < 0.10) ? qqqHistPrev : (qqqV7.prev ?? qqq.prev ?? 0);
   const qqqChg = qqqPrice - qqqPrev;
@@ -586,8 +598,8 @@ async function buildMarketData() {
   const breadth = estimateBreadth(spyChgPct, sectorChanges);
   const tenYrTrend = calcTrend(tnxHistory, 3, 10);
   const dxyTrend = calcTrend(dxyHistory, 3, 10);
-  const regime = (spyPrice > spy50 && spyPrice > spy200 && spyRSI > 45) ? 'uptrend'
-    : (spyPrice < spy50 && spyPrice < spy200) ? 'downtrend' : 'chop';
+  const regime = (spyPrice > spySma89 && spyPrice > spySma233 && spyRSI > 45) ? 'uptrend'
+    : (spyPrice < spySma89 && spyPrice < spySma233) ? 'downtrend' : 'chop';
   const fomcDays = getFomcDays();
   const marketStatus = getMarketStatus();
   const feedQuality = getFeedQuality();
@@ -598,13 +610,15 @@ async function buildMarketData() {
     vix: { price: vixLevel, chg: Math.round(vixChgPct * 100) / 100 },
     dxy: { price: dxyPrice, chg: Math.round(dxyChgPct * 100) / 100 },
     tnx: { price: tnxLevel, chg: Math.round(tnxChgPct * 100) / 100 },
-    spyVs20: spy20 && spyPrice > spy20 ? 'above' : 'below',
-    spyVs50: spy50 && spyPrice > spy50 ? 'above' : 'below',
-    spyVs200: spy200 && spyPrice > spy200 ? 'above' : 'below',
-    spy20: Math.round((spy20 || 0) * 100) / 100,
-    spy50: Math.round((spy50 || 0) * 100) / 100,
-    spy200: Math.round((spy200 || 0) * 100) / 100,
-    qqqVs50: qqq.ma50 ? (qqqPrice > qqq.ma50 ? 'above' : 'below') : 'unknown',
+    spyVs20: spyEma21 && spyPrice > spyEma21 ? 'above' : 'below',
+    spyVs50: spySma89 && spyPrice > spySma89 ? 'above' : 'below',
+    spyVs200: spySma233 && spyPrice > spySma233 ? 'above' : 'below',
+    spy20: spyEma21 ? Math.round(spyEma21 * 100) / 100 : null,
+    spy50: spySma89 ? Math.round(spySma89 * 100) / 100 : null,
+    spy200: spySma233 ? Math.round(spySma233 * 100) / 100 : null,
+    spyEma21AboveSma89: !!spyEma21AboveSma89,
+    spySma89AboveSma233: !!spySma89AboveSma233,
+    qqqVs50: qqqSma89 ? (qqqPrice > qqqSma89 ? 'above' : 'below') : 'unknown',
     spyRSI, regime, vixLevel, vixSlope,
     vixPercentile: estimateVixPercentile(vixLevel),
     putCallRatio: 0.85,
@@ -642,18 +656,7 @@ const WATCHLIST = ['TSLA', 'NVDA', 'PYPL', 'MSTR', 'HD'];
 let watchlistCache = { data: null, ts: 0 };
 const WATCHLIST_CACHE_TTL = 60000; // 1 min cache
 
-async function fetchStockQuoteMAs(symbol) {
-  try {
-    const u = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}&fields=fiftyDayAverage,twoHundredDayAverage`;
-    const data = await httpsGet(u);
-    const q = data?.quoteResponse?.result?.[0];
-    if (!q) return null;
-    return {
-      ma50: Math.round((q.fiftyDayAverage || 0) * 100) / 100,
-      ma200: Math.round((q.twoHundredDayAverage || 0) * 100) / 100
-    };
-  } catch(e) { return null; }
-}
+
 
 async function fetchStockData(symbol, spyHistory, wlV7Quotes) {
   try {
@@ -773,9 +776,9 @@ async function fetchStockData(symbol, spyHistory, wlV7Quotes) {
       ema21: ema21 ? Math.round(ema21 * 100) / 100 : null,
       sma89: sma89 ? Math.round(sma89 * 100) / 100 : null,
       sma233: sma233 ? Math.round(sma233 * 100) / 100 : null,
-      ma20: Math.round((ema21||0) * 100) / 100,
-      ma50: Math.round((sma89||0) * 100) / 100,
-      ma200: Math.round((sma233||0) * 100) / 100,
+      ma20: ema21 ? Math.round(ema21 * 100) / 100 : null,
+      ma50: sma89 ? Math.round(sma89 * 100) / 100 : null,
+      ma200: sma233 ? Math.round(sma233 * 100) / 100 : null,
       vs20: ema21 ? (price > ema21 ? 'above' : 'below') : 'unknown',
       vs50: sma89 ? (price > sma89 ? 'above' : 'below') : 'unknown',
       vs200: sma233 ? (price > sma233 ? 'above' : 'below') : 'unknown',
