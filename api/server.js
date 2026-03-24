@@ -161,6 +161,16 @@ function calcSMA(data, period) {
   return slice.reduce((a, b) => a + b, 0) / period;
 }
 
+function calcEMA(closes, period) {
+  if (!closes || closes.length < period) return null;
+  const k = 2 / (period + 1);
+  let ema = closes.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < closes.length; i++) {
+    ema = closes[i] * k + ema * (1 - k);
+  }
+  return Math.round(ema * 100) / 100;
+}
+
 function calcRSI(closes, period) {
   period = period || 14;
   if (!closes || closes.length < period + 1) return 50;
@@ -647,10 +657,9 @@ async function fetchStockQuoteMAs(symbol) {
 
 async function fetchStockData(symbol, spyHistory, wlV7Quotes) {
   try {
-    const [history, quote, quoteMAs] = await Promise.all([
+    const [history, quote] = await Promise.all([
       fetchYahooHistory(symbol, 400),
-      fetchSingleQuote(symbol, 'WL_' + symbol),
-      fetchStockQuoteMAs(symbol)
+      fetchSingleQuote(symbol, 'WL_' + symbol)
     ]);
     if (!quote || history.length < 20) return null;
 
@@ -663,9 +672,15 @@ async function fetchStockData(symbol, spyHistory, wlV7Quotes) {
       : (wlV7.prev ?? quote.prev ?? 0);
     const wlChg = price - wlPrev;
     const changePct = wlPrev > 0 ? ((price - wlPrev) / wlPrev) * 100 : (wlV7.changePct ?? quote.changePct ?? 0);
-    const ma20 = calcSMA(history, 20);
-    const ma50 = calcSMA(history, 50) || (quoteMAs && quoteMAs.ma50) || null;
-    const ma200 = calcSMA(history, 200) || (quoteMAs && quoteMAs.ma200) || null;
+    // Fibonacci-based MAs
+    const ema8 = calcEMA(history, 8);
+    const ema21 = calcEMA(history, 21);
+    const sma89 = calcSMA(history, 89);
+    const sma233 = calcSMA(history, 233) || null; // requires 233 bars — no ma200 fallback
+    // Keep legacy aliases for compatibility
+    const ma20 = ema21;
+    const ma50 = sma89;
+    const ma200 = sma233;
     const rsi = calcRSI(history, 14);
 
     // Relative strength vs SPY (20d performance comparison)
@@ -684,14 +699,30 @@ async function fetchStockData(symbol, spyHistory, wlV7Quotes) {
 
     // Setup score (0-100)
     let setupScore = 0;
-    if (ma200 && price > ma200) setupScore += 25;
-    if (ma50 && price > ma50) setupScore += 20;
-    if (ma20 && price > ma20) setupScore += 15;
+    // Trend structure — reward being above each MA
+    if (sma233 && price > sma233) setupScore += 25;
+    if (sma89 && price > sma89) setupScore += 20;
+    if (ema21 && price > ema21) setupScore += 15;
+    if (ema8 && price > ema8) setupScore += 5;
+    // RSI health
     if (rsi > 40 && rsi < 70) setupScore += 20;
     if (rsi > 50) setupScore += 5;
-    // Near MA support (within 3%) = good setup
-    if (ma20 && Math.abs(price - ma20) / ma20 < 0.03) setupScore += 15;
-    else if (ma50 && Math.abs(price - ma50) / ma50 < 0.03) setupScore += 10;
+    // Near-MA bonus — only valid when price is AT or ABOVE the MA (true pullback setup)
+    if (ema21) {
+      const dist21 = (price - ema21) / ema21;
+      if (dist21 >= 0 && dist21 < 0.03) setupScore += 10;
+      else if (dist21 < -0.02) setupScore -= 8;
+    }
+    if (sma89) {
+      const dist89 = (price - sma89) / sma89;
+      if (dist89 >= 0 && dist89 < 0.03) setupScore += 8;
+      else if (dist89 < -0.02) setupScore -= 10;
+    }
+    // Trend alignment penalties — punish bearish MA stacking
+    if (ema8 && ema21 && ema8 < ema21) setupScore -= 6;
+    if (ema21 && sma89 && ema21 < sma89) setupScore -= 8;
+    if (sma89 && sma233 && sma89 < sma233) setupScore -= 8;
+    if (sma233 && price < sma233) setupScore -= 15;
     setupScore = Math.max(0, Math.min(100, setupScore));
 
     // Momentum score (0-100)
@@ -703,40 +734,52 @@ async function fetchStockData(symbol, spyHistory, wlV7Quotes) {
     momentumScore += rsi > 55 ? 15 : rsi > 45 ? 8 : 0;
     momentumScore = Math.max(0, Math.min(100, momentumScore));
 
-    const combinedScore = Math.round(setupScore * 0.5 + momentumScore * 0.5);
+    const combinedScore = Math.round(setupScore * 0.6 + momentumScore * 0.4);
 
     // Verdict
     let verdict = 'AVOID';
-    if (combinedScore >= 65 && relStrength >= 0) verdict = 'ACTIONABLE';
+    // Hard floor: ACTIONABLE requires price above EMA 21 + SMA 89 + positive RS
+    const canBeActionable = combinedScore >= 65 &&
+      relStrength >= 0 &&
+      (!sma89 || price >= sma89) &&
+      (!ema21 || price >= ema21);
+    if (canBeActionable) verdict = 'ACTIONABLE';
     else if (combinedScore >= 45) verdict = 'WATCH';
 
     // Key levels
-    const support = ma50 ? Math.round(ma50 * 100) / 100 : null;
-    const resistance = ma20 && price < ma20 ? Math.round(ma20 * 100) / 100 : null;
+    const support = sma89 && price >= sma89 ? Math.round(sma89 * 100) / 100 : null;
+    const resistance = ema21 && price < ema21 ? Math.round(ema21 * 100) / 100 : null;
 
     // Top reasons
     const reasons = [];
-    if (price > (ma200||0)) reasons.push('Above 200d MA');
-    else reasons.push('Below 200d MA');
+    if (ma200) {
+      if (price > ma200) reasons.push('Above SMA 233');
+      else reasons.push('Below SMA 233');
+    }
     if (relStrength > 2) reasons.push('Outperforming SPY +'+relStrength.toFixed(1)+'%');
     else if (relStrength < -2) reasons.push('Underperforming SPY '+relStrength.toFixed(1)+'%');
     if (rsi > 70) reasons.push('RSI overbought ('+rsi+')');
     else if (rsi < 30) reasons.push('RSI oversold ('+rsi+')');
     else if (rsi > 50) reasons.push('RSI healthy ('+rsi+')');
-    if (ma20 && Math.abs(price - ma20) / ma20 < 0.03) reasons.push('Near 20d MA support');
-    if (ma50 && Math.abs(price - ma50) / ma50 < 0.03) reasons.push('Near 50d MA support');
+    if (ma20 && price >= ma20 && (price - ma20) / ma20 < 0.03) reasons.push('Near EMA 21 support');
+    if (ma50 && price >= ma50 && (price - ma50) / ma50 < 0.03) reasons.push('Near SMA 89 support');
 
     return {
       symbol,
       price,
       changePct: Math.round(changePct * 100) / 100,
       change: Math.round(wlChg * 100) / 100,
-      ma20: Math.round((ma20||0) * 100) / 100,
-      ma50: Math.round((ma50||0) * 100) / 100,
-      ma200: Math.round((ma200||0) * 100) / 100,
-      vs20: ma20 ? (price > ma20 ? 'above' : 'below') : 'unknown',
-      vs50: ma50 ? (price > ma50 ? 'above' : 'below') : 'unknown',
-      vs200: ma200 ? (price > ma200 ? 'above' : 'below') : 'unknown',
+      ema8: ema8 ? Math.round(ema8 * 100) / 100 : null,
+      ema21: ema21 ? Math.round(ema21 * 100) / 100 : null,
+      sma89: sma89 ? Math.round(sma89 * 100) / 100 : null,
+      sma233: sma233 ? Math.round(sma233 * 100) / 100 : null,
+      ma20: Math.round((ema21||0) * 100) / 100,
+      ma50: Math.round((sma89||0) * 100) / 100,
+      ma200: Math.round((sma233||0) * 100) / 100,
+      vs20: ema21 ? (price > ema21 ? 'above' : 'below') : 'unknown',
+      vs50: sma89 ? (price > sma89 ? 'above' : 'below') : 'unknown',
+      vs200: sma233 ? (price > sma233 ? 'above' : 'below') : 'unknown',
+      vsEma8: ema8 ? (price > ema8 ? 'above' : 'below') : 'unknown',
       rsi,
       relStrength,
       atr: Math.round(atr * 10) / 10,
