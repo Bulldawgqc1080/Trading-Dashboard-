@@ -93,6 +93,14 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
 .mode-tag{font-size:9px;color:var(--text3);padding:2px 6px;border:1px solid var(--border);border-radius:1px;}
 .summary-body{font-size:12px;color:var(--text);line-height:1.75;border-left:2px solid var(--blue2);padding-left:10px;}
 .directive{font-size:11px;color:var(--text2);padding:6px 10px;border:1px solid var(--border);background:var(--bg3);border-radius:2px;}
+.improve-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:2px;}
+.improve-box{background:var(--bg3);border:1px solid var(--border);padding:10px 12px;border-radius:2px;}
+.improve-title{font-size:9px;letter-spacing:1.5px;margin-bottom:6px;font-weight:600;}
+.improve-title.why{color:var(--red);}
+.improve-title.what{color:var(--amber);}
+.improve-title.working{color:var(--green);}
+.improve-item{font-size:10px;color:var(--text2);padding:2px 0;display:flex;align-items:center;gap:5px;}
+.improve-item::before{content:'›';color:var(--text3);}
 .top-reasons{display:flex;flex-wrap:wrap;gap:5px;}
 .reason-tag{font-size:9px;padding:2px 7px;border-radius:2px;border:1px solid;}
 .reason-tag.pos{color:var(--green);border-color:rgba(0,230,118,.3);background:rgba(0,230,118,.06);}
@@ -267,7 +275,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
 
     <div class="hero-grid">
       <div class="hero-panel">
-        <div class="should-label">should i trade?</div>
+        <div class="should-label">Should I Be Trading?</div>
         <div class="decision-badge CAUTION" id="decisionBadge">···</div>
         <div class="spy-price">SPY <span id="spyPriceLabel">—</span> <span id="spyChgLabel" style="font-size:10px;"></span></div>
         <div id="spyExtLabel" class="ext-row" style="display:none;"></div>
@@ -281,7 +289,8 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
         <div id="scoreZoneLabel" class="score-lbl">market quality</div>
         <div class="divider"></div>
         <div class="exec-wrap">
-          <div class="exec-lbl">execution window</div>
+          <div class="exec-lbl">Tradeability</div>
+          <div style="font-size:8px;color:var(--text3);margin-bottom:3px;">How favorable conditions are for new entries</div>
           <div class="exec-row">
             <span class="exec-num" id="execNum">--</span>
             <div class="exec-track"><div class="exec-fill" id="execFill" style="width:0%;"></div></div>
@@ -292,12 +301,13 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
 
       <div class="summary-panel">
         <div class="panel-hdr">
-          <div class="panel-title">terminal analysis</div>
+          <div class="panel-title">Market Read</div>
           <div class="mode-tag" id="modeTag">SWING MODE</div>
         </div>
         <div class="summary-body" id="summaryBody">Fetching live market data...</div>
         <div id="topReasonsArea" class="top-reasons"></div>
         <div class="directive" id="directiveBody">—</div>
+        <div id="improvementArea"></div>
         <div class="source-row">
           <span id="srcLabel">source: —</span>
           <span id="cacheLabel"></span>
@@ -316,7 +326,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
 
     <div class="feed-panel">
       <div class="panel-hdr">
-        <div class="panel-title">feed health</div>
+        <div class="panel-title">Data Status</div>
         <span style="font-size:9px;color:var(--text3);" id="feedQualityLabel">checking...</span>
       </div>
       <div class="feed-grid" id="feedGrid"></div>
@@ -325,22 +335,22 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
     <div class="bottom-grid">
       <div>
         <div class="sector-panel">
-          <div class="panel-title">sector performance — 1d change</div>
+          <div class="panel-title">Sector Leadership — 1D</div>
           <div class="sector-rows" id="sectorRows"><div class="skeleton" style="height:140px;margin-top:10px;"></div></div>
         </div>
         <div class="history-panel">
           <div class="panel-hdr">
-            <div class="panel-title">score history — 30 day</div>
+            <div class="panel-title">Environment Score — 30D</div>
             <span style="font-size:9px;color:var(--text3);" id="historyNote">building...</span>
           </div>
           <div class="history-chart"><canvas id="historyCanvas"></canvas></div>
         </div>
       </div>
       <div class="score-panel">
-        <div class="panel-title">scoring breakdown</div>
+        <div class="panel-title">Composite Score Breakdown</div>
         <div class="sb-rows" id="sbRows"><div class="skeleton" style="height:140px;margin-top:10px;"></div></div>
         <div class="sb-total-row">
-          <span class="sb-total-lbl">WEIGHTED TOTAL</span>
+          <span class="sb-total-lbl">COMPOSITE SCORE</span>
           <span class="sb-total-val" id="sbTotal" style="color:var(--text);">--%</span>
         </div>
       </div>
@@ -371,7 +381,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
   </div>
 
   <div class="footer">
-    <span>SIBT v1.2 — Educational only. Not financial advice.</span>
+    <span>SIBT v2.0 — For informational purposes only. Not financial advice.</span>
     <span id="footerTime"></span>
   </div>
 </div>
@@ -465,10 +475,10 @@ function buildSummary(d,scores,decision,m){
   var fomcD=d.fomc72hr?' ⚠ FOMC within 72hrs.':d.fomcDays<=7?' FOMC in '+d.fomcDays+'d.':'';
   var summary=trendD+'. '+vixD+'. '+breadthD+'. Leaders: '+topS+', '+top2+'. Laggard: '+btmS+'. '+macroD+tnxD+fomcD;
   var dir='';
-  if(decision==='NOTR')dir='▶ NO-TRADE ZONE (score '+scores.total+'): Market is in a gray zone. Ambiguous signals — wait for clarity before initiating.';
-  else if(decision==='YES')dir=m==='day'?'▶ DAY: Full activity. Favor momentum. Tight stops.':'▶ SWING: Normal sizing. Favor '+topS+'/'+top2+' breakouts. Press winners.';
-  else if(decision==='CAUTION')dir=m==='day'?'▶ DAY: Reduce size 40%. A+ setups only.':'▶ SWING: Half size. A+ only. Tight stops.';
-  else dir='▶ Stand aside. Preserve capital. Wait for environment to improve.';
+  if(decision==='NOTR')dir='▶ Score is in the indecisive zone ('+scores.total+'/100). Mixed signals with no clear edge. Stand aside — ambiguous conditions are not worth risking capital.';
+  else if(decision==='YES')dir=m==='day'?'▶ High-quality environment. Full activity. Favor momentum, press winners, keep stops tight.':'▶ Conditions favor swing exposure. Normal sizing. Favor '+topS+'/'+top2+' setups. Press winners.';
+  else if(decision==='CAUTION')dir=m==='day'?'▶ Marginal tape. Cut size 40–50%. A+ setups only — no forcing.':'▶ Risk selectively. Half size, A+ setups only. Tighten stops and respect reversals.';
+  else dir='▶ This is not a high-quality environment for new risk. Stand aside. Preserve capital and wait for conditions to improve.';
   return{summary:summary,dir:dir};
 }
 
@@ -638,7 +648,8 @@ function renderAll(d){
 
   // Hero
   var badge=document.getElementById('decisionBadge');
-  badge.textContent=isNoTrade?'NO-TRADE ZONE':decision;
+  var verdictText = isNoTrade ? 'STAND ASIDE' : decision === 'YES' ? 'TRADE' : decision === 'CAUTION' ? 'A+ ONLY' : 'NO TRADE';
+  badge.textContent = verdictText;
   badge.className='decision-badge '+(isNoTrade?'NOTR':decision);
   document.getElementById('ringNum').textContent=scores.total;
   document.getElementById('ringNum').style.color=color;
@@ -667,22 +678,87 @@ function renderAll(d){
   document.getElementById('execFill').style.width=scores.exec+'%';
   document.getElementById('execFill').style.background=ec;
   var zoneLbl=document.getElementById('scoreZoneLabel');
-  if(isNoTrade){zoneLbl.textContent='⚠ no-trade zone (45–55)';zoneLbl.style.color='var(--text3)';}
-  else{zoneLbl.textContent='market quality';zoneLbl.style.color='';}
+  var scoreBand = scores.total >= 76 ? 'High Quality' : scores.total >= 56 ? 'Tradeable' : scores.total >= 31 ? 'Mixed' : 'Poor';
+  var bandRange = scores.total >= 76 ? '76–100' : scores.total >= 56 ? '56–75' : scores.total >= 31 ? '31–55' : '0–30';
+  if(isNoTrade){
+    zoneLbl.innerHTML='<span title="Score is in the indecisive gray zone — wait for clarity">⚠ Stand Aside · No-Trade Zone (45–55)</span>';
+    zoneLbl.style.color='var(--text3)';
+  } else {
+    zoneLbl.innerHTML='<span style="color:'+color+'">'+scoreBand+'</span><span style="color:var(--text3);font-size:8px;margin-left:4px;">('+bandRange+')</span>';
+    zoneLbl.style.color='';
+  }
 
   // Summary + reasons
   document.getElementById('modeTag').textContent=mode.toUpperCase()+' MODE';
   document.getElementById('summaryBody').textContent=text.summary;
   document.getElementById('directiveBody').textContent=text.dir;
+
+  // What needs to improve / what's working / what's broken
+  var impArea = document.getElementById('improvementArea');
+  if (impArea) {
+    var whyItems = [];
+    var workingItems = [];
+    var needsItems = [];
+
+    // Why it's the current signal
+    if(d.vixLevel >= 24) whyItems.push('Volatility elevated (VIX '+d.vixLevel+')');
+    if(d.vixSlope > 0.5) whyItems.push('VIX trending higher');
+    if(d.spyVs20 === 'below') whyItems.push('SPY below EMA 21');
+    if(d.spyVs50 === 'below') whyItems.push('SPY below SMA 89');
+    if(d.spyVs200 === 'below') whyItems.push('SPY below SMA 233');
+    if(d.pctAbove50 < 35) whyItems.push('Breadth weak ('+d.pctAbove50+'% above SMA 89)');
+    if(d.tenYrTrend === 'rising') whyItems.push('Yields trending higher');
+
+    // What would improve the score
+    if(d.vixLevel >= 20) needsItems.push('VIX back below 20');
+    if(d.spyVs20 === 'below') needsItems.push('SPY reclaim EMA 21 and hold');
+    if(d.spyVs50 === 'below') needsItems.push('SPY reclaim SMA 89');
+    if(d.pctAbove50 < 45) needsItems.push('Breadth expand above 45%');
+    if(!d.spyEma21AboveSma89) needsItems.push('EMA 21 cross above SMA 89');
+
+    // What's working
+    var topSectors = d.sectors.filter(function(s){return s.chg > 0.5;});
+    if(topSectors.length > 0) workingItems.push(topSectors.slice(0,2).map(function(s){return s.name;}).join(' + ')+' leadership');
+    if(d.spyRSI < 35) workingItems.push('RSI oversold — potential bounce zone');
+    if(d.dxyTrend === 'falling') workingItems.push('Dollar weakening (macro tailwind)');
+    if(d.vixSlope < -0.5) workingItems.push('VIX pulling back');
+    if(d.spyVs200 === 'above') workingItems.push('SPY holding above SMA 233');
+
+    if(decision === 'YES' || decision === 'CAUTION') {
+      // Flip the framing for good environments
+      var html = '<div class="improve-grid">';
+      html += '<div class="improve-box"><div class="improve-title working">WHAT&#39;S WORKING</div>';
+      html += (workingItems.length ? workingItems : ['Broad participation','Trend intact','Vol contained']).map(function(i){return '<div class="improve-item">'+i+'</div>';}).join('');
+      html += '</div>';
+      html += '<div class="improve-box"><div class="improve-title what">WATCH FOR</div>';
+      html += (whyItems.length ? whyItems.slice(0,3) : ['Any vol spike','Breadth narrowing']).map(function(i){return '<div class="improve-item">'+i+'</div>';}).join('');
+      html += '</div></div>';
+      impArea.innerHTML = html;
+    } else {
+      var html = '<div class="improve-grid">';
+      html += '<div class="improve-box"><div class="improve-title why">WHY IT&#39;S A NO</div>';
+      html += whyItems.slice(0,4).map(function(i){return '<div class="improve-item">'+i+'</div>';}).join('');
+      html += '</div>';
+      html += '<div class="improve-box"><div class="improve-title what">WHAT NEEDS TO IMPROVE</div>';
+      html += needsItems.slice(0,4).map(function(i){return '<div class="improve-item">'+i+'</div>';}).join('');
+      html += '</div></div>';
+      if(workingItems.length > 0) {
+        html += '<div class="improve-box" style="margin-top:6px;"><div class="improve-title working">WHAT&#39;S STILL WORKING</div>';
+        html += workingItems.map(function(i){return '<div class="improve-item">'+i+'</div>';}).join('');
+        html += '</div>';
+      }
+      impArea.innerHTML = html;
+    }
+  }
   var reasons=d.topReasons||[];
   var isPositive=scores.total>=60;
   document.getElementById('topReasonsArea').innerHTML=reasons.map(function(r){
     return '<span class="reason-tag '+(isPositive?'pos':'neg')+'">'+r+'</span>';
   }).join('');
-  document.getElementById('srcLabel').textContent='source: '+(d.dataSource||'Yahoo Finance');
-  document.getElementById('cacheLabel').textContent=d.cached?'(cached)':'(fresh)';
+  document.getElementById('srcLabel').textContent='Data: '+(d.dataSource||'Yahoo Finance');
+  document.getElementById('cacheLabel').textContent=d.cached?' · Cached':'';
   var upd=d.lastUpdated?new Date(d.lastUpdated).toLocaleTimeString():'';
-  document.getElementById('lastUpdLabel').textContent=upd?'fetched: '+upd:'';
+  document.getElementById('lastUpdLabel').textContent=upd?' · '+upd:'';
 
   // Alerts
   var alertArea=document.getElementById('alertArea');
