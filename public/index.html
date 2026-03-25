@@ -574,7 +574,7 @@ function renderAll(d){
  {sym:'DXY', val:d.dxy.price.toFixed(2), chg:(d.dxy.chg || 0), price:d.dxy.price},
  {sym:'10Y', val:d.tenYrLevel.toFixed(2)+'%', chg:(d.tnx.chg || 0)}
  ].concat(d.sectors.slice(0,5).map(function(s){ return {sym:s.sym, val:s.chg.toFixed(2)+'%', chg:s.chg, price:s.price}; }));
- document.getElementById('ticker').innerHTML = items.concat(items).map(function(it){
+ document.getElementById('ticker').innerHTML = items.map(function(it){
   var cls = it.chg > 0 ? 'up' : it.chg < 0 ? 'dn' : 'fl';
   var arrow = it.chg > 0 ? '▲' : it.chg < 0 ? '▼' : '→';
   var sign = it.chg > 0 ? '+' : '';
