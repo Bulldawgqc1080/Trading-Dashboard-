@@ -200,9 +200,9 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
 .ext-row{display:flex;align-items:center;gap:5px;font-size:10px;margin-top:2px;}
 @media(max-width:700px){.watchlist-grid{grid-template-columns:1fr;}}
 .sc-signal{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:2px;border:1px solid;}
-.sc-signal.hold{background:rgba(0,230,118,.05);border-color:rgba(0,230,118,.2);color:var(--green);}
-.sc-signal.tighten{background:rgba(255,171,64,.05);border-color:rgba(255,171,64,.2);color:var(--amber);}
-.sc-signal.exit{background:rgba(255,82,82,.08);border-color:rgba(255,82,82,.3);color:var(--red);}
+.sc-signal.favorable{background:rgba(0,230,118,.05);border-color:rgba(0,230,118,.2);color:var(--green);}
+.sc-signal.caution{background:rgba(255,171,64,.05);border-color:rgba(255,171,64,.2);color:var(--amber);}
+.sc-signal.avoid{background:rgba(255,82,82,.08);border-color:rgba(255,82,82,.3);color:var(--red);}
 .sc-signal-icon{font-size:13px;}
 .sc-signal-text{font-size:10px;font-weight:600;letter-spacing:1px;}
 .sc-signal-reason{font-size:9px;opacity:0.8;margin-left:4px;}
@@ -801,21 +801,21 @@ function scoreCol(s){ return s>=65?'#00e676':s>=45?'#ffab40':'#ff5252'; }
 
 function getSellSignal(s, marketDecision) {
  var triggers = [];
- var level = 'hold';
- if (s.vs20 === 'below' && s.vs50 === 'below' && s.vs200 === 'below') { triggers.push('Below EMA21/89/233'); level = 'exit'; }
- if (s.rsi > 78) { triggers.push('RSI overbought ('+s.rsi+')'); level = 'exit'; }
- if (s.relStrength < -8) { triggers.push('RS collapsing vs SPY'); level = 'exit'; }
- if (marketDecision === 'NO' && s.verdict === 'AVOID') { triggers.push('Market NO + stock AVOID'); level = level === 'hold' ? 'exit' : level; }
- if (level === 'hold') {
-  if (s.vs20 === 'below' && s.vs50 === 'above') { triggers.push('Broke below EMA 21'); level = 'tighten'; }
-  if (s.rsi > 70 && s.rsi <= 78) { triggers.push('RSI extended ('+s.rsi+')'); level = 'tighten'; }
-  if (s.relStrength < -3 && s.relStrength >= -8) { triggers.push('RS weakening vs SPY'); level = 'tighten'; }
-  if (s.momentumScore < 30 && s.setupScore > 50) { triggers.push('Momentum fading'); level = 'tighten'; }
-  if (marketDecision === 'CAUTION') { triggers.push('Market in caution zone'); level = 'tighten'; }
+ var level = 'favorable';
+ if (s.vs20 === 'below' && s.vs50 === 'below' && s.vs200 === 'below') { triggers.push('Below EMA21/89/233'); level = 'avoid'; }
+ if (s.rsi > 78) { triggers.push('RSI overbought ('+s.rsi+')'); level = 'avoid'; }
+ if (s.relStrength < -8) { triggers.push('RS collapsing vs SPY'); level = 'avoid'; }
+ if (marketDecision === 'NO' && s.verdict === 'AVOID') { triggers.push('Market NO + stock AVOID'); level = level === 'favorable' ? 'avoid' : level; }
+ if (level === 'favorable') {
+  if (s.vs20 === 'below' && s.vs50 === 'above') { triggers.push('Lost EMA 21'); level = 'caution'; }
+  if (s.rsi > 70 && s.rsi <= 78) { triggers.push('RSI extended ('+s.rsi+')'); level = 'caution'; }
+  if (s.relStrength < -3 && s.relStrength >= -8) { triggers.push('RS weakening vs SPY'); level = 'caution'; }
+  if (s.momentumScore < 30 && s.setupScore > 50) { triggers.push('Momentum fading'); level = 'caution'; }
+  if (marketDecision === 'CAUTION') { triggers.push('Market in caution zone'); level = 'caution'; }
  }
- var labels = { hold: 'HOLD / NO POSITION', tighten: 'TIGHTEN STOP', exit: 'EXIT SIGNAL' };
- var icons = { hold: '●', tighten: '▲', exit: '⛔' };
- return { level: level, label: labels[level], icon: icons[level], reason: triggers.slice(0, 2).join(' · ') || (level === 'hold' ? 'Structure intact' : '') };
+ var labels = { favorable: 'FAVORABLE', caution: 'CAUTION', avoid: 'NOT ELIGIBLE' };
+ var icons = { favorable: '●', caution: '▲', avoid: '⛔' };
+ return { level: level, label: labels[level], icon: icons[level], reason: triggers.slice(0, 2).join(' · ') || (level === 'favorable' ? 'Structure acceptable' : '') };
 }
 
 function renderWatchlist(stocks) {
