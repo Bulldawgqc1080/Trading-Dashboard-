@@ -394,35 +394,54 @@ function calcScoresServer(d) {
 
 async function logJournalEntry(entry) {
   const today = new Date().toISOString().split('T')[0];
-  const exists = journal.find(j => j.date === today);
-  if (!exists) {
-    const stored = await kvGet('sibt:journal');
-    if (stored && Array.isArray(stored)) journal = stored;
-    if (!journal.find(j => j.date === today)) {
-      journal.push({
-        date: today,
-        ts: Date.now(),
-        score: entry.score,
-        decision: entry.decision,
-        spyEntry: entry.spyEntry,
-        qqqEntry: entry.qqqEntry,
-        vixEntry: entry.vixEntry,
-        breadthMode: entry.breadthMode,
-        breadthSampleSize: entry.breadthSampleSize,
-        regime: entry.regime,
-        categoryScores: entry.categoryScores,
-        topReasons: entry.topReasons,
-        leadSectors: entry.leadSectors,
-        laggardSector: entry.laggardSector,
-        spyExit: null,
-        outcome1d: null,
-        outcome5d: null,
-        outcome10d: null
-      });
-      if (journal.length > 180) journal = journal.slice(-180);
-      await saveJournal();
-    }
+  const stored = await kvGet('sibt:journal');
+  if (stored && Array.isArray(stored)) journal = stored;
+
+  const existing = journal.find(j => j.date === today);
+  if (existing) {
+    existing.ts = existing.ts || Date.now();
+    existing.score = entry.score;
+    existing.decision = entry.decision;
+    existing.spyEntry = entry.spyEntry;
+    existing.qqqEntry = entry.qqqEntry;
+    existing.vixEntry = entry.vixEntry;
+    existing.breadthMode = entry.breadthMode;
+    existing.breadthSampleSize = entry.breadthSampleSize;
+    existing.regime = entry.regime;
+    existing.categoryScores = entry.categoryScores;
+    existing.topReasons = entry.topReasons;
+    existing.leadSectors = entry.leadSectors;
+    existing.laggardSector = entry.laggardSector;
+    if (existing.spyExit === undefined) existing.spyExit = null;
+    if (existing.outcome1d === undefined) existing.outcome1d = null;
+    if (existing.outcome5d === undefined) existing.outcome5d = null;
+    if (existing.outcome10d === undefined) existing.outcome10d = null;
+    await saveJournal();
+    return;
   }
+
+  journal.push({
+    date: today,
+    ts: Date.now(),
+    score: entry.score,
+    decision: entry.decision,
+    spyEntry: entry.spyEntry,
+    qqqEntry: entry.qqqEntry,
+    vixEntry: entry.vixEntry,
+    breadthMode: entry.breadthMode,
+    breadthSampleSize: entry.breadthSampleSize,
+    regime: entry.regime,
+    categoryScores: entry.categoryScores,
+    topReasons: entry.topReasons,
+    leadSectors: entry.leadSectors,
+    laggardSector: entry.laggardSector,
+    spyExit: null,
+    outcome1d: null,
+    outcome5d: null,
+    outcome10d: null
+  });
+  if (journal.length > 180) journal = journal.slice(-180);
+  await saveJournal();
 }
 
 function addToScoreHistory(score, decision) {
