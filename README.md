@@ -1,16 +1,28 @@
+[README.md](https://github.com/user-attachments/files/26251406/README.md)
 # SIBT — Should I Be Trading?
 
-Bloomberg Terminal-style market environment dashboard for swing traders.
+Market environment dashboard for swing traders.
 
 ## What it does
-- Pulls live data from Yahoo Finance (SPY, QQQ, VIX, sectors, 10Y, DXY)
+- Pulls live market data from Yahoo Finance
+- Tracks SPY, QQQ, VIX, DXY, 10Y, and sector ETFs
 - Scores the market across 5 weighted categories (0–100)
-- Outputs a clear YES / CAUTION / NO trading decision
-- Generates a plain-English market summary from the scores
-- Auto-refreshes every 45 seconds
-- Falls back to demo data if backend is unreachable
+- Produces a simple market decision:
+  - **YES**
+  - **CAUTION**
+  - **NO**
+- Ranks watchlist names based on setup + momentum
+- Applies **market regime gating** so weak market conditions reduce stock-level signals
+- Auto-refreshes on a timer
+- Falls back to demo behavior if the backend is unreachable
 
-## Scoring Weights
+---
+
+## Core Model
+
+### Market Regime Score
+The market score is built from 5 categories:
+
 | Category   | Weight |
 |------------|--------|
 | Volatility | 25%    |
@@ -19,82 +31,148 @@ Bloomberg Terminal-style market environment dashboard for swing traders.
 | Breadth    | 20%    |
 | Macro      | 10%    |
 
-## Decision Thresholds
-| Score   | Swing    | Day Trade |
-|---------|----------|-----------|
-| 80–100  | YES      | —         |
-| 75–100  | —        | YES       |
-| 60–79   | CAUTION  | —         |
-| 55–74   | —        | CAUTION   |
-| < 60    | NO       | —         |
-| < 55    | —        | NO        |
+### Decision Bands
+Current regime output:
+
+| Score | Decision |
+|------|----------|
+| 70–100 | YES |
+| 45–69 | CAUTION |
+| 0–44 | NO |
+
+### Veto Logic
+The backend also applies **regime veto rules**.
+
+Even if the weighted score looks acceptable, the final decision can be capped lower when multiple hostile conditions appear together, such as:
+- elevated and rising volatility
+- SPY below major moving averages
+- weak participation
+- defensive sector leadership
+
+This keeps the model from being too optimistic in structurally weak tape.
+
+---
+
+## Watchlist Logic
+Watchlist names are scored separately from the market regime.
+
+Each stock uses:
+- trend structure
+- relative strength vs SPY
+- momentum
+- setup quality
+
+But stock verdicts are also **gated by the market regime**:
+
+- In a **NO** market, stocks are downgraded
+- In a **CAUTION** market, `ACTIONABLE` requires stronger conditions
+- Single-name strength is not allowed to fully override hostile market context
+
+---
+
+## Data Notes
+
+### Reliable enough for dashboard use
+- SPY / QQQ / sector ETF pricing
+- VIX level and short-term slope
+- moving averages
+- RSI
+- sector leadership
+- relative strength vs SPY
+
+### Proxy / partial inputs
+Some parts of the model are intentionally marked as less authoritative:
+
+- **Breadth** = currently a **proxy**
+  - estimated from sector participation and SPY tone
+  - not true exchange breadth
+- **Macro** = currently **partial**
+  - uses yields, dollar trend, and FOMC proximity
+  - not a full macro regime model
+- **Put/Call** = currently **unavailable**
+  - not wired to a live options sentiment feed
+
+---
+
+## Important Limitations
+This project is useful as a **market context tool**, but it should not be treated as a fully validated execution engine.
+
+Current limitations:
+- Yahoo Finance is unofficial and may be inconsistent
+- breadth is proxy-based, not true NYSE/Nasdaq internals
+- macro model is partial
+- no live put/call feed
+- no institutional-grade market internals
+- no formal backtest layer yet
+
+If this is used for real-money trading, it should be treated as a **decision support dashboard**, not a blind signal engine.
+
+---
+
+## What would improve accuracy
+To make the model more serious, the next upgrades should be:
+
+- real breadth data
+  - adv/decl
+  - new highs/new lows
+  - % above key moving averages
+- live put/call data
+- stronger macro inputs
+- backtesting against forward returns
+- better validation of regime thresholds
 
 ---
 
 ## Local Development
 
-### 1. Start the backend
+### Start the backend
 ```bash
-cd sibt
 node api/server.js
 ```
-Backend runs at: http://localhost:3001
-Test it: http://localhost:3001/api/market
 
-### 2. Open the frontend
-Open `public/index.html` directly in your browser.
-The frontend auto-detects localhost and hits `http://localhost:3001/api/market`.
+Backend default:
+```text
+http://localhost:3001
+```
+
+Market endpoint:
+```text
+http://localhost:3001/api/market
+```
+
+Watchlist endpoint:
+```text
+http://localhost:3001/api/watchlist
+```
+
+Crypto endpoint:
+```text
+http://localhost:3001/api/crypto
+```
+
+### Frontend
+Open:
+```text
+public/index.html
+```
+
+The frontend auto-detects localhost and calls the local backend.
 
 ---
 
-## Deploy to Vercel
-
-### One-time setup
-```bash
-npm install -g vercel
-```
-
-### Deploy
-```bash
-cd sibt
-vercel
-```
-
-Follow the prompts:
-- Set up and deploy? **Y**
-- Which scope? (your account)
-- Link to existing project? **N**
-- Project name: **sibt** (or anything)
-- Directory: **./** (current)
-- Override settings? **N**
-
-Your dashboard will be live at `https://sibt-[random].vercel.app`
-
-### Production deploy
-```bash
-vercel --prod
-```
+## Deployment
+This project can be deployed on Vercel or any simple Node-compatible host.
 
 ---
 
-## Data Sources
-- **Quotes & sector data**: Yahoo Finance v7 API (free, no key needed)
-- **Price history**: Yahoo Finance v8 chart API (for MA calculations)
-- **FOMC calendar**: Hardcoded dates (update annually in `api/server.js`)
-- **Fed stance**: Manual — update `getFedStance()` in `api/server.js`
-- **Breadth data**: Estimated from sector internals (real breadth requires paid data)
+## Current Philosophy
+SIBT is built to answer:
 
-## Known Limitations
-- Yahoo Finance unofficial API — may have rate limits or occasional downtime
-- Breadth data (% above MAs, A/D line) is estimated, not real NYSE data
-- McClellan Oscillator is approximated from sector breadth
-- Put/Call ratio is static (requires CBOE feed for real data)
-- Fed stance must be updated manually
+**“Is this a good environment to press risk?”**
 
-## Roadmap
-- [ ] Wire real breadth data (StockAnalysis free API)
-- [ ] Add CBOE put/call ratio
-- [ ] Historical score chart (last 30 days)
-- [ ] Mobile layout improvements
-- [ ] Email/SMS alert when score crosses threshold
-- [ ] Optional OpenAI "deep analysis" button
+It is **not** meant to imply:
+- guaranteed trades
+- automated execution quality
+- institutional-grade precision
+
+The goal is clarity, discipline, and context — not false certainty.
