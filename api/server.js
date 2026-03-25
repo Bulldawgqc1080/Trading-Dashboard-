@@ -392,16 +392,34 @@ function calcScoresServer(d) {
   };
 }
 
-async function logJournalEntry(spyPrice, score, decision) {
+async function logJournalEntry(entry) {
   const today = new Date().toISOString().split('T')[0];
   const exists = journal.find(j => j.date === today);
   if (!exists) {
-    // Try to load latest from KV first in case another instance wrote
     const stored = await kvGet('sibt:journal');
     if (stored && Array.isArray(stored)) journal = stored;
     if (!journal.find(j => j.date === today)) {
-      journal.push({ date: today, score, decision, spyEntry: spyPrice, spyExit: null, outcome: null, ts: Date.now() });
-      if (journal.length > 90) journal = journal.slice(-90);
+      journal.push({
+        date: today,
+        ts: Date.now(),
+        score: entry.score,
+        decision: entry.decision,
+        spyEntry: entry.spyEntry,
+        qqqEntry: entry.qqqEntry,
+        vixEntry: entry.vixEntry,
+        breadthMode: entry.breadthMode,
+        breadthSampleSize: entry.breadthSampleSize,
+        regime: entry.regime,
+        categoryScores: entry.categoryScores,
+        topReasons: entry.topReasons,
+        leadSectors: entry.leadSectors,
+        laggardSector: entry.laggardSector,
+        spyExit: null,
+        outcome1d: null,
+        outcome5d: null,
+        outcome10d: null
+      });
+      if (journal.length > 180) journal = journal.slice(-180);
       await saveJournal();
     }
   }
@@ -413,6 +431,40 @@ function addToScoreHistory(score, decision) {
     scoreHistory.push({ date: today, score, decision });
     if (scoreHistory.length > 30) scoreHistory = scoreHistory.slice(-30);
   }
+}
+
+async function backfillJournalOutcomes() {
+  if (!journal.length) return;
+  try {
+    const closes = await fetchYahooHistory('SPY', 260);
+    if (!closes || closes.length < 15) return;
+
+    for (let i = 0; i < journal.length; i++) {
+      const j = journal[i];
+      if (!Number.isFinite(j.spyEntry) || (j.outcome1d != null && j.outcome5d != null && j.outcome10d != null)) continue;
+
+      let entryIdx = -1;
+      for (let k = 0; k < closes.length; k++) {
+        if (Math.abs(closes[k] - j.spyEntry) / j.spyEntry < 0.003) {
+          entryIdx = k;
+          break;
+        }
+      }
+      if (entryIdx === -1) continue;
+
+      const calcRet = (offset) => {
+        if (!closes[entryIdx + offset]) return null;
+        return Math.round((((closes[entryIdx + offset] - j.spyEntry) / j.spyEntry) * 100) * 100) / 100;
+      };
+
+      j.outcome1d = calcRet(1);
+      j.outcome5d = calcRet(5);
+      j.outcome10d = calcRet(10);
+      j.spyExit = closes[entryIdx + 1] ? Math.round(closes[entryIdx + 1] * 100) / 100 : null;
+    }
+
+    await saveJournal();
+  } catch(e) {}
 }
 
 async function fetchV7Quotes(symbols) {
@@ -772,7 +824,26 @@ async function buildMarketData() {
   marketData.decision = scores.decision;
 
   addToScoreHistory(scores.total, scores.decision);
-  await logJournalEntry(Math.round(spyPrice * 100) / 100, scores.total, scores.decision);
+  await logJournalEntry({
+    score: scores.total,
+    decision: scores.decision,
+    spyEntry: Math.round(spyPrice * 100) / 100,
+    qqqEntry: Math.round(qqqPrice * 100) / 100,
+    vixEntry: vixLevel,
+    breadthMode: breadth.mode,
+    breadthSampleSize: breadth.sampleSize || null,
+    regime,
+    categoryScores: {
+      volatility: scores.vix,
+      momentum: scores.momentum,
+      trend: scores.trend,
+      breadth: scores.breadth,
+      macro: scores.macro
+    },
+    topReasons: scores.topReasons,
+    leadSectors: sectors.slice(0, 3).map(s => s.sym),
+    laggardSector: sectors[sectors.length - 1]?.sym || null
+  });
 
   try {
     const wlData = await buildWatchlistData(spyHistory, scores.decision);
@@ -988,6 +1059,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (parsed.pathname === '/api/journal') {
+    await backfillJournalOutcomes();
     res.setHeader('Cache-Control', 'no-store, max-age=0');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
