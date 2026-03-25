@@ -516,6 +516,41 @@ async function backfillJournalOutcomes() {
   } catch(e) {}
 }
 
+function summarizeDecisionBucket(entries) {
+  const nums = (arr, key) => arr.map(x => x[key]).filter(v => typeof v === 'number');
+  const avg = (vals) => vals.length ? Math.round((vals.reduce((a,b) => a + b, 0) / vals.length) * 100) / 100 : null;
+  const winRate = (vals) => vals.length ? Math.round((vals.filter(v => v > 0).length / vals.length) * 100) : null;
+  const o1 = nums(entries, 'outcome1d');
+  const o5 = nums(entries, 'outcome5d');
+  const o10 = nums(entries, 'outcome10d');
+  return {
+    count: entries.length,
+    avg1d: avg(o1),
+    avg5d: avg(o5),
+    avg10d: avg(o10),
+    winRate1d: winRate(o1),
+    winRate5d: winRate(o5),
+    winRate10d: winRate(o10)
+  };
+}
+
+function buildBacktestSummary() {
+  const normalized = journal.map(normalizeJournalEntry);
+  const yes = normalized.filter(j => j.decision === 'YES');
+  const caution = normalized.filter(j => j.decision === 'CAUTION');
+  const no = normalized.filter(j => j.decision === 'NO');
+  return {
+    updatedAt: new Date().toISOString(),
+    totalEntries: normalized.length,
+    buckets: {
+      YES: summarizeDecisionBucket(yes),
+      CAUTION: summarizeDecisionBucket(caution),
+      NO: summarizeDecisionBucket(no)
+    },
+    recent: normalized.slice(-10)
+  };
+}
+
 async function fetchV7Quotes(symbols) {
   try {
     const symStr = symbols.join(',');
@@ -1114,6 +1149,16 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('Expires', '0');
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ journal, count: journal.length }));
+    return;
+  }
+
+  if (parsed.pathname === '/api/backtest') {
+    await backfillJournalOutcomes();
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(buildBacktestSummary()));
     return;
   }
 
