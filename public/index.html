@@ -322,6 +322,14 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
  <div id="backtestPanel" style="margin-top:8px;font-size:10px;color:var(--text2);">Fetching backtest stats...</div>
  </div>
 
+ <div class="feed-panel">
+ <div class="panel-hdr">
+ <div class="panel-title">Recent Journal Entries</div>
+ <span style="font-size:9px;color:var(--text3);" id="journalCountLabel">loading...</span>
+ </div>
+ <div id="journalPanel" style="margin-top:8px;font-size:10px;color:var(--text2);">Fetching recent journal entries...</div>
+ </div>
+
  <div class="bottom-grid">
  <div>
  <div class="sector-panel">
@@ -997,6 +1005,7 @@ async function loadCrypto(force) {
 function renderBacktest(data) {
  if (!data || !data.buckets) {
   document.getElementById('backtestPanel').innerHTML = '<span style="color:var(--red);">No backtest data available.</span>';
+  document.getElementById('journalPanel').innerHTML = '<span style="color:var(--red);">No journal data available.</span>';
   return;
  }
  var buckets = ['YES','CAUTION','NO'];
@@ -1022,6 +1031,28 @@ function renderBacktest(data) {
  html += '<div style="font-size:9px;color:var(--text3);margin-top:8px;">Sample size is still small — treat this as directional, not definitive.</div>';
  document.getElementById('backtestPanel').innerHTML = html;
  document.getElementById('backtestUpdatedLabel').textContent = data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString() : 'ready';
+
+ var recent = (data.recent || []).slice().reverse();
+ var journalHtml = '<div style="display:flex;flex-direction:column;gap:6px;">';
+ journalHtml += recent.map(function(j){
+  var col = j.decision === 'YES' ? 'var(--green)' : j.decision === 'CAUTION' ? 'var(--amber)' : 'var(--red)';
+  return '<div style="background:var(--bg3);border:1px solid var(--border);padding:8px 10px;border-radius:2px;display:flex;flex-direction:column;gap:4px;">' +
+   '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+   '<span style="font-size:10px;font-weight:700;color:'+col+'">'+(j.date||'—')+' · '+(j.decision||'—')+'</span>' +
+   '<span style="font-size:9px;color:var(--text3);">score '+(j.score!=null?j.score:'—')+'</span>' +
+   '</div>' +
+   '<div style="font-size:10px;color:var(--text2);display:flex;gap:12px;flex-wrap:wrap;">' +
+   '<span>SPY '+(j.spyEntry!=null?j.spyEntry:'—')+'</span>' +
+   '<span>1D '+(j.outcome1d!=null?j.outcome1d+'%':'—')+'</span>' +
+   '<span>5D '+(j.outcome5d!=null?j.outcome5d+'%':'—')+'</span>' +
+   '<span>10D '+(j.outcome10d!=null?j.outcome10d+'%':'—')+'</span>' +
+   '</div>' +
+   '<div style="font-size:9px;color:var(--text3);">'+((j.topReasons&&j.topReasons.length)?j.topReasons.join(' · '):'No detailed reasons logged')+'</div>' +
+   '</div>';
+ }).join('');
+ journalHtml += '</div>';
+ document.getElementById('journalPanel').innerHTML = journalHtml;
+ document.getElementById('journalCountLabel').textContent = (data.recent ? data.recent.length : 0) + ' shown';
  backtestLoaded = true;
 }
 
