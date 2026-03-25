@@ -452,9 +452,39 @@ function addToScoreHistory(score, decision) {
   }
 }
 
+function normalizeJournalEntry(j) {
+  return {
+    date: j.date,
+    ts: j.ts || Date.now(),
+    score: j.score ?? null,
+    decision: j.decision ?? null,
+    spyEntry: j.spyEntry ?? null,
+    qqqEntry: j.qqqEntry ?? null,
+    vixEntry: j.vixEntry ?? null,
+    breadthMode: j.breadthMode ?? null,
+    breadthSampleSize: j.breadthSampleSize ?? null,
+    regime: j.regime ?? null,
+    categoryScores: j.categoryScores ?? null,
+    topReasons: j.topReasons ?? [],
+    leadSectors: j.leadSectors ?? [],
+    laggardSector: j.laggardSector ?? null,
+    spyExit: j.spyExit ?? null,
+    outcome1d: j.outcome1d ?? null,
+    outcome5d: j.outcome5d ?? null,
+    outcome10d: j.outcome10d ?? null
+  };
+}
+
+async function normalizeJournal() {
+  if (!journal.length) return;
+  journal = journal.map(normalizeJournalEntry);
+  await saveJournal();
+}
+
 async function backfillJournalOutcomes() {
   if (!journal.length) return;
   try {
+    await normalizeJournal();
     const closes = await fetchYahooHistory('SPY', 260);
     if (!closes || closes.length < 15) return;
 
