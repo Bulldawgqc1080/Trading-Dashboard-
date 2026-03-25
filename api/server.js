@@ -12,6 +12,19 @@ const CRYPTO_CACHE_TTL = 60000;
 let scoreHistory = [];
 let feedHealth = {};
 let journal = [];
+let breadthCache = { data: null, ts: 0 };
+const BREADTH_CACHE_TTL = 5 * 60 * 1000;
+const BREADTH_UNIVERSE = [
+  'AAPL','MSFT','NVDA','AMZN','GOOGL','GOOG','META','BRK-B','LLY','AVGO',
+  'JPM','XOM','UNH','V','MA','COST','JNJ','PG','HD','ABBV',
+  'BAC','KO','MRK','PEP','CVX','ADBE','NFLX','CRM','AMD','WMT',
+  'ACN','CSCO','TMO','MCD','ABT','DHR','LIN','INTU','CMCSA','WFC',
+  'TXN','AMGN','PM','DIS','NEE','INTC','RTX','UNP','IBM','QCOM',
+  'CAT','SPGI','NOW','GE','LOW','ISRG','HON','VRTX','GS','PFE',
+  'BLK','BKNG','AXP','SYK','TJX','PLD','AMAT','SCHW','MDT','LMT',
+  'DE','ADP','GILD','C','MMC','MO','CB','T','SO','DUK',
+  'CI','MDLZ','REGN','ADI','PANW','ETN','ELV','ZTS','CL','BDX'
+];
 
 // Upstash Redis REST API
 const UPSTASH_URL = process.env.KV_REST_API_URL;
@@ -444,6 +457,80 @@ async function fetchFearAndGreed() {
   } catch(e) { return null; }
 }
 
+async function computeRealBreadth() {
+  const now = Date.now();
+  if (breadthCache.data && (now - breadthCache.ts) < BREADTH_CACHE_TTL) {
+    return breadthCache.data;
+  }
+
+  const histories = await Promise.all(BREADTH_UNIVERSE.map(async (sym) => {
+    try {
+      const closes = await fetchYahooHistory(sym, 260);
+      if (!closes || closes.length < 233) return null;
+      const price = closes[closes.length - 1];
+      const prev = closes[closes.length - 2];
+      const ema21 = calcEMA(closes, 21);
+      const sma89 = calcSMA(closes, 89);
+      const sma233 = calcSMA(closes, 233);
+      const last20 = closes.slice(-20);
+      const prior20 = closes.slice(-21, -1);
+      const high20 = last20.length ? Math.max(...last20) : null;
+      const low20 = last20.length ? Math.min(...last20) : null;
+      const prevHigh20 = prior20.length ? Math.max(...prior20) : null;
+      const prevLow20 = prior20.length ? Math.min(...prior20) : null;
+      return {
+        sym,
+        price,
+        prev,
+        advancer: price > prev,
+        decliner: price < prev,
+        above21: ema21 != null && price > ema21,
+        above89: sma89 != null && price > sma89,
+        above233: sma233 != null && price > sma233,
+        newHigh20: prevHigh20 != null && price >= prevHigh20,
+        newLow20: prevLow20 != null && price <= prevLow20
+      };
+    } catch(e) {
+      return null;
+    }
+  }));
+
+  const valid = histories.filter(Boolean);
+  const total = valid.length || 1;
+  const advancers = valid.filter(x => x.advancer).length;
+  const decliners = valid.filter(x => x.decliner).length;
+  const pctAbove21 = Math.round((valid.filter(x => x.above21).length / total) * 100);
+  const pctAbove89 = Math.round((valid.filter(x => x.above89).length / total) * 100);
+  const pctAbove233 = Math.round((valid.filter(x => x.above233).length / total) * 100);
+  const newHighs20d = valid.filter(x => x.newHigh20).length;
+  const newLows20d = valid.filter(x => x.newLow20).length;
+  const adRatio = decliners === 0 ? advancers : Math.round((advancers / decliners) * 100) / 100;
+  const highsLows = newHighs20d - newLows20d;
+
+  const breadth = {
+    mode: 'real',
+    universe: 'sp100-ish',
+    sampleSize: valid.length,
+    advancers,
+    decliners,
+    adRatio,
+    pctAbove20: pctAbove21,
+    pctAbove50: pctAbove89,
+    pctAbove200: pctAbove233,
+    pctAbove21,
+    pctAbove89,
+    pctAbove233,
+    newHighs20d,
+    newLows20d,
+    nasdaqHL: highsLows,
+    mcclellan: null,
+    participation: pctAbove21
+  };
+
+  breadthCache = { data: breadth, ts: now };
+  return breadth;
+}
+
 async function fetchCryptoData() {
   const now = Date.now();
   if (cryptoCache.data && now - cryptoCache.ts < CRYPTO_CACHE_TTL) {
@@ -623,7 +710,12 @@ async function buildMarketData() {
   })).sort((a, b) => b.chg - a.chg);
 
   const sectorChanges = sectors.map(s => s.chg);
-  const breadth = estimateBreadth(spyChgPct, sectorChanges);
+  let breadth;
+  try {
+    breadth = await computeRealBreadth();
+  } catch(e) {
+    breadth = estimateBreadth(spyChgPct, sectorChanges);
+  }
   const tenYrTrend = calcTrend(tnxHistory, 3, 10);
   const dxyTrend = calcTrend(dxyHistory, 3, 10);
   const regime = (spyPrice > spySma89 && spyPrice > spySma233 && spyRSI > 45) ? 'uptrend'
@@ -652,6 +744,8 @@ async function buildMarketData() {
     putCallRatio: null,
     putCallMode: 'unavailable',
     breadthMode: breadth.mode,
+    breadthUniverse: breadth.universe || 'proxy',
+    breadthSampleSize: breadth.sampleSize || null,
     ...breadth,
     tenYrLevel: tnxLevel, tenYrTrend, dxyTrend,
     fedStance: 'neutral',
