@@ -314,6 +314,14 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--mono);font-si
  <div class="feed-grid" id="feedGrid"></div>
  </div>
 
+ <div class="feed-panel">
+ <div class="panel-hdr">
+ <div class="panel-title">Backtest Summary</div>
+ <span style="font-size:9px;color:var(--text3);" id="backtestUpdatedLabel">loading...</span>
+ </div>
+ <div id="backtestPanel" style="margin-top:8px;font-size:10px;color:var(--text2);">Fetching backtest stats...</div>
+ </div>
+
  <div class="bottom-grid">
  <div>
  <div class="sector-panel">
@@ -376,6 +384,7 @@ var mode='swing',lastData=null,secondsSince=0,refreshTimer=null,isLoading=false;
 var localHistory=[];
 var watchlistLoaded=false;
 var cryptoLoaded=false;
+var backtestLoaded=false;
 
 function getMockData(){
  return{spy:{price:542.18,chg:0.71,dollar:3.82},qqq:{price:462.40,chg:1.12,dollar:5.11},
@@ -785,7 +794,7 @@ function setMode(m){
 }
 function startAutoRefresh(){clearInterval(refreshTimer);refreshTimer=setInterval(function(){secondsSince=0;fetchData();},45000);}
 
-fetchData();startAutoRefresh();
+fetchData();startAutoRefresh();loadBacktest();
 setInterval(function(){secondsSince++;document.getElementById('tsLabel').textContent='updated '+secondsSince+'s ago';},1000);
 
 function switchTab(tab) {
@@ -982,6 +991,53 @@ async function loadCrypto(force) {
   renderCrypto(data);
  } catch(err) {
   document.getElementById('cryptoContent').innerHTML = '<div class="wl-loading" style="color:var(--red);">Failed: ' + err.message + '</div>';
+ }
+}
+
+function renderBacktest(data) {
+ if (!data || !data.buckets) {
+  document.getElementById('backtestPanel').innerHTML = '<span style="color:var(--red);">No backtest data available.</span>';
+  return;
+ }
+ var buckets = ['YES','CAUTION','NO'];
+ var html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;">';
+ html += buckets.map(function(key){
+  var b = data.buckets[key] || {};
+  var col = key === 'YES' ? 'var(--green)' : key === 'CAUTION' ? 'var(--amber)' : 'var(--red)';
+  return '<div style="background:var(--bg3);border:1px solid var(--border);padding:10px 12px;border-radius:2px;display:flex;flex-direction:column;gap:5px;">' +
+   '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+   '<span style="font-size:10px;font-weight:700;letter-spacing:1px;color:'+col+'">'+key+'</span>' +
+   '<span style="font-size:9px;color:var(--text3);">'+(b.count||0)+' entries</span>' +
+   '</div>' +
+   '<div style="font-size:10px;color:var(--text2);display:flex;justify-content:space-between;"><span>Avg 1D</span><span>'+(b.avg1d!=null?b.avg1d+'%':'—')+'</span></div>' +
+   '<div style="font-size:10px;color:var(--text2);display:flex;justify-content:space-between;"><span>Avg 5D</span><span>'+(b.avg5d!=null?b.avg5d+'%':'—')+'</span></div>' +
+   '<div style="font-size:10px;color:var(--text2);display:flex;justify-content:space-between;"><span>Avg 10D</span><span>'+(b.avg10d!=null?b.avg10d+'%':'—')+'</span></div>' +
+   '<div style="height:1px;background:var(--border);margin:2px 0;"></div>' +
+   '<div style="font-size:10px;color:var(--text2);display:flex;justify-content:space-between;"><span>Win 1D</span><span>'+(b.winRate1d!=null?b.winRate1d+'%':'—')+'</span></div>' +
+   '<div style="font-size:10px;color:var(--text2);display:flex;justify-content:space-between;"><span>Win 5D</span><span>'+(b.winRate5d!=null?b.winRate5d+'%':'—')+'</span></div>' +
+   '<div style="font-size:10px;color:var(--text2);display:flex;justify-content:space-between;"><span>Win 10D</span><span>'+(b.winRate10d!=null?b.winRate10d+'%':'—')+'</span></div>' +
+   '</div>';
+ }).join('');
+ html += '</div>';
+ html += '<div style="font-size:9px;color:var(--text3);margin-top:8px;">Sample size is still small — treat this as directional, not definitive.</div>';
+ document.getElementById('backtestPanel').innerHTML = html;
+ document.getElementById('backtestUpdatedLabel').textContent = data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString() : 'ready';
+ backtestLoaded = true;
+}
+
+async function loadBacktest() {
+ try {
+  var backtestUrl = API_URL.replace('/api/market', '/api/backtest');
+  var ctrl = new AbortController();
+  var tid = setTimeout(function(){ ctrl.abort(); }, 15000);
+  var res = await fetch(backtestUrl + '?t=' + Date.now(), { signal: ctrl.signal, cache: 'no-store' });
+  clearTimeout(tid);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  var data = await res.json();
+  renderBacktest(data);
+ } catch(err) {
+  document.getElementById('backtestPanel').innerHTML = '<span style="color:var(--red);">Backtest load failed: '+err.message+'</span>';
+  document.getElementById('backtestUpdatedLabel').textContent = 'error';
  }
 }
 </script>
