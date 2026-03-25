@@ -462,7 +462,7 @@ function buildSummary(d,scores,decision,m){
  var dir='';
  if(decision==='YES')dir=m==='day'?'▶ Environment is supportive, but still manage intraday risk tightly.':'▶ Conditions support new risk better than average. Favor strongest leadership and clean structure.';
  else if(decision==='CAUTION')dir='▶ Mixed environment. Selective risk only — smaller size, tighter standards, no forcing.';
- else dir='▶ Risk is not well supported here. Stand aside or stay very selective until conditions improve.';
+ else dir='▶ New swing risk is not well supported here. That does not automatically mean the market drops — it means conditions are weak for clean new setups.';
  return{summary:summary,dir:dir};
 }
 
@@ -603,7 +603,7 @@ function renderAll(d){
  }).join('');
 
  var badge=document.getElementById('decisionBadge');
- var verdictText = decision === 'YES' ? 'TRADE' : decision === 'CAUTION' ? 'A+ ONLY' : 'NO TRADE';
+ var verdictText = decision === 'YES' ? 'FAVORABLE' : decision === 'CAUTION' ? 'SELECTIVE' : 'NOT FAVORABLE';
  badge.textContent = verdictText;
  badge.className='decision-badge '+decision;
  document.getElementById('ringNum').textContent=scores.total;
@@ -1028,7 +1028,7 @@ function renderBacktest(data) {
    '</div>';
  }).join('');
  html += '</div>';
- html += '<div style="font-size:9px;color:var(--text3);margin-top:8px;">Sample size is still small — treat this as directional, not definitive.</div>';
+ html += '<div style="font-size:9px;color:var(--text3);margin-top:8px;">Sample size is still small — use this as context for setup quality, not a stand-alone market prediction engine.</div>';
  document.getElementById('backtestPanel').innerHTML = html;
  document.getElementById('backtestUpdatedLabel').textContent = data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString() : 'ready';
 
