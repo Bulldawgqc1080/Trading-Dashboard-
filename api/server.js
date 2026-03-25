@@ -496,7 +496,12 @@ async function computeRealBreadth() {
   }));
 
   const valid = histories.filter(Boolean);
-  const total = valid.length || 1;
+  const minSample = 60;
+  if (valid.length < minSample) {
+    throw new Error('Breadth sample too small: ' + valid.length);
+  }
+
+  const total = valid.length;
   const advancers = valid.filter(x => x.advancer).length;
   const decliners = valid.filter(x => x.decliner).length;
   const pctAbove21 = Math.round((valid.filter(x => x.above21).length / total) * 100);
@@ -504,7 +509,7 @@ async function computeRealBreadth() {
   const pctAbove233 = Math.round((valid.filter(x => x.above233).length / total) * 100);
   const newHighs20d = valid.filter(x => x.newHigh20).length;
   const newLows20d = valid.filter(x => x.newLow20).length;
-  const adRatio = decliners === 0 ? advancers : Math.round((advancers / decliners) * 100) / 100;
+  const adRatio = decliners === 0 ? (advancers > 0 ? advancers : 1) : Math.round((advancers / decliners) * 100) / 100;
   const highsLows = newHighs20d - newLows20d;
 
   const breadth = {
@@ -714,7 +719,10 @@ async function buildMarketData() {
   try {
     breadth = await computeRealBreadth();
   } catch(e) {
-    breadth = estimateBreadth(spyChgPct, sectorChanges);
+    breadth = {
+      ...estimateBreadth(spyChgPct, sectorChanges),
+      fallbackReason: e.message
+    };
   }
   const tenYrTrend = calcTrend(tnxHistory, 3, 10);
   const dxyTrend = calcTrend(dxyHistory, 3, 10);
