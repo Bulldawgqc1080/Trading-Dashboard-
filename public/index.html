@@ -815,7 +815,7 @@ function getSellSignal(s, marketDecision) {
  }
  var labels = { favorable: 'FAVORABLE', caution: 'CAUTION', avoid: 'NOT ELIGIBLE' };
  var icons = { favorable: '●', caution: '▲', avoid: '⛔' };
- return { level: level, label: labels[level], icon: icons[level], reason: triggers.slice(0, 2).join(' · ') || (level === 'favorable' ? 'Structure acceptable' : '') };
+ return { level: level, label: labels[level], icon: icons[level], reason: triggers.slice(0, 2).join(' · ') || (level === 'favorable' ? 'Structure acceptable' : ''), shortReason: triggers[0] || (level === 'favorable' ? 'Structure acceptable' : 'Conditions weak') };
 }
 
 function renderWatchlist(stocks) {
@@ -854,6 +854,7 @@ function renderWatchlist(stocks) {
    '</div>' +
    '<span class="sc-verdict '+s.verdict+'">'+s.verdict+'</span>' +
    '</div>' +
+   '<div style="font-size:10px;color:var(--text2);padding:6px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:2px;">'+signal.shortReason+'</div>' +
    '<div class="sc-scores">' +
    '<div class="sc-score-box"><span class="sc-score-lbl">SETUP</span><span class="sc-score-val" style="color:'+setupCol+'">'+s.setupScore+'</span><div class="sc-score-bar-track"><div class="sc-score-bar-fill" style="width:'+s.setupScore+'%;background:'+setupCol+'"></div></div></div>' +
    '<div class="sc-score-box"><span class="sc-score-lbl">MOMENTUM</span><span class="sc-score-val" style="color:'+momCol+'">'+s.momentumScore+'</span><div class="sc-score-bar-track"><div class="sc-score-bar-fill" style="width:'+s.momentumScore+'%;background:'+momCol+'"></div></div></div>' +
