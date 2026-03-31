@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="SIBT — reliability-first market environment dashboard for swing traders.">
+  <title>SIBT — Should I Be Trading?</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="logo">SIBT</div>
+  </header>
+
+  <main>
+    <div id="statusBanner"></div>
+
+    <section class="hero">
+      <div class="card">
+        <div class="metric-label">MARKET DECISION</div>
+        <div id="decision" class="decision">LOADING</div>
+        <div class="subtle">Score</div>
+        <div id="score" class="big-score">--</div>
+        <div class="subtle" style="margin-top:10px;">Confidence</div>
+        <div id="confidence" style="font-size:22px;font-weight:700;">--</div>
+        <div id="timestamp" class="muted" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
+        <div class="metric-label">CURRENT READ</div>
+        <div id="summary" style="font-size:13px;line-height:1.7"></div>
+        <div class="metric-label" style="margin-top:14px;">ACTION GUIDANCE</div>
+        <div id="guidance" class="subtle" style="line-height:1.7"></div>
+        <div class="grid-2" style="margin-top:14px;">
+          <div>
+            <div class="metric-label">TOP REASONS</div>
+            <div id="reasons"></div>
+          </div>
+          <div>
+            <div class="metric-label">BLOCKERS</div>
+            <div id="blockers"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid-5" id="categoryGrid"></section>
+
+    <section class="grid-2">
+      <div class="card">
+        <div class="metric-label">DATA QUALITY</div>
+        <div id="quality"></div>
+      </div>
+      <div class="card">
+        <div class="metric-label">MARKET SNAPSHOT</div>
+        <div id="snapshot"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>SIBT — reliability-first build</span>
+    <span id="footerTime"></span>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>
