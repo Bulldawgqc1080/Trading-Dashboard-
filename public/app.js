@@ -1,5 +1,7 @@
 const API_URL = '/api/market';
 const WATCHLIST_URL = '/api/watchlist';
+const BACKTEST_URL = '/api/backtest';
+const JOURNAL_URL = '/api/journal';
 
 function scoreColor(s){return s>=70?'var(--green)':s>=45?'var(--amber)':'var(--red)'}
 function pill(text, cls){return `<span class="pill ${cls}">${text}</span>`}
@@ -36,13 +38,10 @@ function renderMarket(data) {
   document.getElementById('guidance').textContent = data.guidance || '';
   document.getElementById('reasons').innerHTML = (data.topReasons || []).map(r => pill(r, 'good')).join('') || '<span class="muted">—</span>';
   document.getElementById('blockers').innerHTML = (data.blockers || []).map(r => pill(r, 'bad')).join('') || '<span class="muted">—</span>';
-
   const cats = data.categoryScores || {};
   document.getElementById('categoryGrid').innerHTML = Object.entries(cats).map(([k,v]) => `<div class="card score-row"><div class="metric-label">${k.toUpperCase()}</div><div style="font-size:24px;font-weight:700;color:${scoreColor(v)}">${v}</div><div class="track"><div class="fill" style="width:${v}%;background:${scoreColor(v)}"></div></div></div>`).join('');
-
   const dq = data.dataQuality || {};
   document.getElementById('quality').innerHTML = `<div class="kv"><span>Quality</span><span>${dq.label || '—'}</span></div><div class="kv"><span>Proxy inputs</span><span class="subtle">${(dq.proxyInputs || []).join(', ') || 'none'}</span></div><div class="kv"><span>Missing inputs</span><span class="subtle">${(dq.missingInputs || []).join(', ') || 'none'}</span></div><div class="kv"><span>Stale feeds</span><span class="subtle">${(dq.staleFeeds || []).join(', ') || 'none'}</span></div><div class="kv"><span>Feed errors</span><span class="subtle">${(dq.errors || []).join(', ') || 'none'}</span></div>`;
-
   const m = data.market || {};
   document.getElementById('snapshot').innerHTML = `<div class="kv"><span>SPY</span><span>${m.spy?.price ?? '—'} (${m.spy?.chg ?? '—'}%)</span></div><div class="kv"><span>QQQ</span><span>${m.qqq?.price ?? '—'} (${m.qqq?.chg ?? '—'}%)</span></div><div class="kv"><span>VIX</span><span>${m.vix?.price ?? '—'}</span></div><div class="kv"><span>DXY</span><span>${m.dxy?.price ?? '—'}</span></div><div class="kv"><span>10Y</span><span>${m.tnx?.price ?? '—'}</span></div>`;
 }
@@ -50,63 +49,43 @@ function renderMarket(data) {
 function renderWatchlist(data) {
   const statusEl = document.getElementById('watchlistStatus');
   const grid = document.getElementById('watchlistGrid');
-  if (!data || !data.stocks || !data.stocks.length) {
-    statusEl.textContent = 'No watchlist data available.';
-    grid.innerHTML = '';
-    return;
-  }
+  if (!data || !data.stocks || !data.stocks.length) { statusEl.textContent = 'No watchlist data available.'; grid.innerHTML = ''; return; }
   statusEl.textContent = data.cached ? 'Watchlist loaded (cached).' : 'Watchlist loaded.';
-  grid.innerHTML = data.stocks.map(s => `<div class="wl-card ${s.verdict}">
-    <div class="wl-row">
-      <div><div class="wl-sym">${s.symbol}</div><div class="wl-price">$${Number(s.price).toFixed(2)} <span style="font-size:11px;color:${s.changePct >= 0 ? 'var(--green)' : 'var(--red)'}">${s.changePct >= 0 ? '+' : ''}${s.changePct.toFixed(2)}%</span></div></div>
-      <div class="wl-badge ${s.verdict}">${s.verdict}</div>
-    </div>
-    <div class="wl-note">${s.signal?.shortReason || '—'}</div>
-    <div class="wl-levels">
-      <div class="kv"><span>Setup</span><span style="color:${scoreColor(s.setupScore)}">${s.setupScore}</span></div>
-      <div class="kv"><span>Momentum</span><span style="color:${scoreColor(s.momentumScore)}">${s.momentumScore}</span></div>
-      <div class="kv"><span>RS vs SPY</span><span>${s.relStrength >= 0 ? '+' : ''}${s.relStrength.toFixed(1)}%</span></div>
-      <div class="kv"><span>RSI</span><span>${s.rsi}</span></div>
-      <div class="kv"><span>Support</span><span>${s.support ?? '—'}</span></div>
-      <div class="kv"><span>20D resistance</span><span>${s.resistance ?? '—'}</span></div>
-    </div>
-    <div>
-      <div class="wl-section-title">WHY IT SCORES THIS WAY</div>
-      <div class="wl-list">${(s.why || []).map(r => pill(r, 'good')).join('') || '<span class="muted">—</span>'}</div>
-    </div>
-    <div>
-      <div class="wl-section-title">WHAT NEEDS TO IMPROVE</div>
-      <div class="wl-list">${(s.needs || []).map(r => pill(r, 'warn')).join('') || '<span class="muted">—</span>'}</div>
-    </div>
-  </div>`).join('');
+  grid.innerHTML = data.stocks.map(s => `<div class="wl-card ${s.verdict}"><div class="wl-row"><div><div class="wl-sym">${s.symbol}</div><div class="wl-price">$${Number(s.price).toFixed(2)} <span style="font-size:11px;color:${s.changePct >= 0 ? 'var(--green)' : 'var(--red)'}">${s.changePct >= 0 ? '+' : ''}${s.changePct.toFixed(2)}%</span></div></div><div class="wl-badge ${s.verdict}">${s.verdict}</div></div><div class="wl-note">${s.signal?.shortReason || '—'}</div><div class="wl-levels"><div class="kv"><span>Setup</span><span style="color:${scoreColor(s.setupScore)}">${s.setupScore}</span></div><div class="kv"><span>Momentum</span><span style="color:${scoreColor(s.momentumScore)}">${s.momentumScore}</span></div><div class="kv"><span>RS vs SPY</span><span>${s.relStrength >= 0 ? '+' : ''}${s.relStrength.toFixed(1)}%</span></div><div class="kv"><span>RSI</span><span>${s.rsi}</span></div><div class="kv"><span>Support</span><span>${s.support ?? '—'}</span></div><div class="kv"><span>20D resistance</span><span>${s.resistance ?? '—'}</span></div></div><div><div class="wl-section-title">WHY IT SCORES THIS WAY</div><div class="wl-list">${(s.why || []).map(r => pill(r, 'good')).join('') || '<span class="muted">—</span>'}</div></div><div><div class="wl-section-title">WHAT NEEDS TO IMPROVE</div><div class="wl-list">${(s.needs || []).map(r => pill(r, 'warn')).join('') || '<span class="muted">—</span>'}</div></div></div>`).join('');
 }
 
-async function loadMarket() {
-  try {
-    const res = await fetch(`${API_URL}?t=${Date.now()}`, { cache: 'no-store' });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    if (data.status === 'unavailable') renderUnavailable(data);
-    else renderMarket(data);
-  } catch (err) {
-    renderUnavailable({ systemStatus: { reason: err.message } });
-  }
+function renderBacktest(data) {
+  const status = document.getElementById('backtestStatus');
+  const panel = document.getElementById('backtestPanel');
+  if (!data || !data.buckets) { status.textContent = 'No backtest data available.'; panel.innerHTML = ''; return; }
+  status.textContent = data.updatedAt ? `Updated ${new Date(data.updatedAt).toLocaleTimeString()}` : 'Ready';
+  const buckets = ['YES', 'CAUTION', 'NO'];
+  panel.innerHTML = `<div class="bt-grid">${buckets.map(key => { const b = data.buckets[key] || {}; const col = key === 'YES' ? 'var(--green)' : key === 'CAUTION' ? 'var(--amber)' : 'var(--red)'; return `<div class="bt-card"><div class="kv"><span style="color:${col};font-weight:700">${key}</span><span class="muted">${b.count || 0} entries</span></div><div class="kv"><span>Avg 1D</span><span>${b.avg1d != null ? b.avg1d + '%' : '—'}</span></div><div class="kv"><span>Avg 5D</span><span>${b.avg5d != null ? b.avg5d + '%' : '—'}</span></div><div class="kv"><span>Avg 10D</span><span>${b.avg10d != null ? b.avg10d + '%' : '—'}</span></div><div class="kv"><span>Win 1D</span><span>${b.winRate1d != null ? b.winRate1d + '%' : '—'}</span></div><div class="kv"><span>Win 5D</span><span>${b.winRate5d != null ? b.winRate5d + '%' : '—'}</span></div><div class="kv"><span>Win 10D</span><span>${b.winRate10d != null ? b.winRate10d + '%' : '—'}</span></div></div>`; }).join('')}</div>`;
 }
 
-async function loadWatchlist() {
-  try {
-    const res = await fetch(`${WATCHLIST_URL}?t=${Date.now()}`, { cache: 'no-store' });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    renderWatchlist(data);
-  } catch (err) {
-    document.getElementById('watchlistStatus').textContent = `Watchlist failed: ${err.message}`;
-  }
+function renderJournal(data) {
+  const status = document.getElementById('journalStatus');
+  const panel = document.getElementById('journalPanel');
+  if (!data || !data.journal || !data.journal.length) { status.textContent = 'No journal data available.'; panel.innerHTML = ''; return; }
+  status.textContent = `${data.count} total entries`;
+  panel.innerHTML = `<div class="journal-list">${data.journal.slice(-8).reverse().map(j => { const col = j.decision === 'YES' ? 'var(--green)' : j.decision === 'CAUTION' ? 'var(--amber)' : 'var(--red)'; return `<div class="journal-item"><div class="kv"><span style="color:${col};font-weight:700">${j.date} · ${j.decision || '—'}</span><span>score ${j.score ?? '—'}</span></div><div class="kv"><span>Confidence</span><span>${j.confidenceScore ?? '—'}</span></div><div class="kv"><span>SPY</span><span>${j.spyEntry ?? '—'}</span></div><div class="kv"><span>1D / 5D / 10D</span><span>${j.outcome1d ?? '—'} / ${j.outcome5d ?? '—'} / ${j.outcome10d ?? '—'}</span></div><div>${(j.topReasons || []).map(r => pill(r, 'good')).join('')}</div></div>`; }).join('')}</div>`;
+}
+
+async function loadJson(url) {
+  const res = await fetch(`${url}?t=${Date.now()}`, { cache: 'no-store' });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
 }
 
 async function loadAll() {
-  await loadMarket();
-  await loadWatchlist();
+  try {
+    const market = await loadJson(API_URL);
+    if (market.status === 'unavailable') renderUnavailable(market); else renderMarket(market);
+  } catch (err) { renderUnavailable({ systemStatus: { reason: err.message } }); }
+  try { renderWatchlist(await loadJson(WATCHLIST_URL)); } catch (err) { document.getElementById('watchlistStatus').textContent = `Watchlist failed: ${err.message}`; }
+  try { renderBacktest(await loadJson(BACKTEST_URL)); } catch (err) { document.getElementById('backtestStatus').textContent = `Backtest failed: ${err.message}`; }
+  try { renderJournal(await loadJson(JOURNAL_URL)); } catch (err) { document.getElementById('journalStatus').textContent = `Journal failed: ${err.message}`; }
   document.getElementById('footerTime').textContent = new Date().toLocaleString();
 }
 
