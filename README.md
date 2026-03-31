@@ -1,7 +1,20 @@
-[README.md](https://github.com/user-attachments/files/26385283/README.md)
+[README.md](https://github.com/user-attachments/files/26385404/README.md)
 # SIBT — Should I Be Trading?
 
-Reliability-first market environment dashboard for swing traders.
+Reliability-first market **permission** dashboard for swing traders.
+
+## Core framing
+SIBT is a **market permission tool**, not a directional prediction engine.
+
+It is designed to answer:
+- Is the environment supportive for pressing fresh swing risk?
+- How much permission exists right now?
+- What is blocking better conditions?
+
+It is **not** designed to claim:
+- where SPY must go next
+- automatic bearish/bullish forecasts
+- guaranteed trade outcomes
 
 ## What changed in this refactor
 - Canonical project structure: `api/`, `public/`, `lib/`
@@ -11,6 +24,7 @@ Reliability-first market environment dashboard for swing traders.
 - Backend owns decision truth; frontend renders only
 - Watchlist ported into new structure
 - Journal + backtest ported into new structure
+- Market wording updated to emphasize permission over prediction
 
 ## Project structure
 ```text
