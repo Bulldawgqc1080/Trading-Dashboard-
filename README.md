@@ -1,4 +1,4 @@
-[README.md](https://github.com/user-attachments/files/26385770/README.md)
+[README.md](https://github.com/user-attachments/files/26385920/README.md)
 # SIBT — Should I Be Trading?
 
 Reliability-first market **permission** dashboard for swing traders.
@@ -6,12 +6,14 @@ Reliability-first market **permission** dashboard for swing traders.
 ## Core framing
 SIBT is a **market permission tool**, not a directional prediction engine.
 
-## Basic test pass
-A lightweight test pass now exists for:
-- market scoring buckets
-- feed health / unavailable state
-- confidence scoring
+## Cleanup pass completed
+Recent cleanup improvements:
+- removed unnecessary `spyHistory` from `/api/market` public payload
+- kept SPY history server-side for watchlist logic only
+- split market cache from watchlist use more cleanly
+- kept behavior the same while trimming payload size
 
+## Basic test pass
 Run locally:
 ```bash
 npm test
