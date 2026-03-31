@@ -1,10 +1,11 @@
 {
   "name": "sibt",
-  "version": "2.0.0",
-  "description": "Should I Be Trading? — reliability-first market environment dashboard for swing traders",
+  "version": "2.1.0",
+  "description": "Should I Be Trading? — reliability-first market permission dashboard for swing traders",
   "scripts": {
     "start": "node api/server.js",
-    "dev": "node api/server.js"
+    "dev": "node api/server.js",
+    "test": "node test/market-score.test.js && node test/health.test.js && node test/confidence.test.js"
   },
   "engines": {
     "node": ">=18.0.0"
