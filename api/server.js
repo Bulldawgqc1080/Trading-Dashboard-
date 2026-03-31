@@ -2,13 +2,15 @@ const http = require('http');
 const https = require('https');
 const url = require('url');
 
-const { PORT, CACHE_TTL } = require('../lib/config');
+const { PORT, CACHE_TTL, WATCHLIST, WATCHLIST_CACHE_TTL } = require('../lib/config');
 const { calcSMA, calcEMA, calcRSI, calcSlope, calcTrend } = require('../lib/indicators');
 const { buildMarketScore, estimateVixPercentile } = require('../lib/scoring/market');
 const { buildConfidence } = require('../lib/scoring/confidence');
+const { buildStockVerdict, buildWatchlistSignal } = require('../lib/scoring/watchlist');
 const { getFeedQuality, buildSystemStatus } = require('../lib/health');
 
 let cache = { data: null, ts: 0 };
+let watchlistCache = { data: null, ts: 0, marketDecision: null };
 let feedHealth = {};
 
 function httpsGet(reqUrl) {
@@ -97,23 +99,12 @@ function estimateBreadth(spyChgPct, sectorChanges) {
   const pctAboveSma233 = Math.max(10, Math.min(70, pctAboveSma89 - 6));
   const adRatioProxy = Math.round((0.8 + (upSectors / sectorCount) * 0.8) * 100) / 100;
   const highsLowsProxy = Math.round(30 + (upSectors / sectorCount) * 50);
-  return {
-    mode: 'proxy',
-    pctAbove20: Math.round(pctAboveEma21),
-    pctAbove50: Math.round(pctAboveSma89),
-    pctAbove200: Math.round(pctAboveSma233),
-    adRatio: adRatioProxy,
-    nasdaqHL: highsLowsProxy,
-    mcclellan: null,
-    participation: Math.round(participation)
-  };
+  return { mode: 'proxy', pctAbove20: Math.round(pctAboveEma21), pctAbove50: Math.round(pctAboveSma89), pctAbove200: Math.round(pctAboveSma233), adRatio: adRatioProxy, nasdaqHL: highsLowsProxy, mcclellan: null, participation: Math.round(participation) };
 }
 
 function getMarketStatus() {
   const now = new Date();
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false
-  }).formatToParts(now);
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(now);
   const map = Object.fromEntries(parts.map(p => [p.type, p.value]));
   const weekday = map.weekday;
   const hour = parseInt(map.hour, 10);
@@ -128,157 +119,81 @@ function getMarketStatus() {
 async function buildMarketData() {
   const sectorSyms = ['XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLU','XLB','XLRE','XLC'];
   const sectorNames = { XLK:'Technology', XLF:'Financials', XLE:'Energy', XLV:'Health Care', XLI:'Industrials', XLY:'Cons Discret', XLP:'Cons Staples', XLU:'Utilities', XLB:'Materials', XLRE:'Real Estate', XLC:'Comm Services' };
-
   const [spy, qqq, vix, dxy, tnx, spyHistory, qqqHistory, vixHistory, tnxHistory, dxyHistory, ...sectorResults] = await Promise.all([
-    fetchSingleQuote('SPY', 'SPY'),
-    fetchSingleQuote('QQQ', 'QQQ'),
-    fetchSingleQuote('^VIX', 'VIX'),
-    fetchSingleQuote('DX-Y.NYB', 'DXY'),
-    fetchSingleQuote('^TNX', 'TNX'),
-    fetchYahooHistory('SPY', 300),
-    fetchYahooHistory('QQQ', 120),
-    fetchYahooHistory('^VIX', 30),
-    fetchYahooHistory('^TNX', 20),
-    fetchYahooHistory('DX-Y.NYB', 20),
+    fetchSingleQuote('SPY', 'SPY'), fetchSingleQuote('QQQ', 'QQQ'), fetchSingleQuote('^VIX', 'VIX'), fetchSingleQuote('DX-Y.NYB', 'DXY'), fetchSingleQuote('^TNX', 'TNX'),
+    fetchYahooHistory('SPY', 300), fetchYahooHistory('QQQ', 120), fetchYahooHistory('^VIX', 30), fetchYahooHistory('^TNX', 20), fetchYahooHistory('DX-Y.NYB', 20),
     ...sectorSyms.map(s => fetchSingleQuote(s, s))
   ]);
 
-  const spyPrice = spy?.price || 0;
-  const qqqPrice = qqq?.price || 0;
-  const vixLevel = vix?.price || 0;
-  const dxyPrice = dxy?.price || 0;
-  const tnxLevel = tnx?.price || 0;
-
-  const spyEma21 = calcEMA(spyHistory, 21);
-  const spySma89 = calcSMA(spyHistory, 89);
-  const spySma233 = calcSMA(spyHistory, 233);
-  const qqqSma89 = calcSMA(qqqHistory, 89);
-  const spyRSI = calcRSI(spyHistory, 14);
-  const vixSlope = calcSlope(vixHistory, 5);
-  const tenYrTrend = calcTrend(tnxHistory, 3, 10);
-  const dxyTrend = calcTrend(dxyHistory, 3, 10);
-
-  const sectors = sectorSyms.map((sym, i) => ({
-    sym,
-    name: sectorNames[sym],
-    price: sectorResults[i]?.price ?? 0,
-    chg: sectorResults[i]?.changePct ?? 0
-  })).sort((a, b) => b.chg - a.chg);
-
+  const spyPrice = spy?.price || 0, qqqPrice = qqq?.price || 0, vixLevel = vix?.price || 0, dxyPrice = dxy?.price || 0, tnxLevel = tnx?.price || 0;
+  const spyEma21 = calcEMA(spyHistory, 21), spySma89 = calcSMA(spyHistory, 89), spySma233 = calcSMA(spyHistory, 233), qqqSma89 = calcSMA(qqqHistory, 89);
+  const spyRSI = calcRSI(spyHistory, 14), vixSlope = calcSlope(vixHistory, 5), tenYrTrend = calcTrend(tnxHistory, 3, 10), dxyTrend = calcTrend(dxyHistory, 3, 10);
+  const sectors = sectorSyms.map((sym, i) => ({ sym, name: sectorNames[sym], price: sectorResults[i]?.price ?? 0, chg: sectorResults[i]?.changePct ?? 0 })).sort((a, b) => b.chg - a.chg);
   const breadth = estimateBreadth(spy?.changePct || 0, sectors.map(s => s.chg));
   const regime = (spyPrice > spySma89 && spyPrice > spySma233 && spyRSI > 45) ? 'uptrend' : (spyPrice < spySma89 && spyPrice < spySma233) ? 'downtrend' : 'chop';
   const marketStatus = getMarketStatus();
-
   return {
-    spy: { price: spyPrice, chg: spy?.changePct ?? 0, dollar: spy?.change ?? 0 },
-    qqq: { price: qqqPrice, chg: qqq?.changePct ?? 0, dollar: qqq?.change ?? 0 },
-    vix: { price: vixLevel, chg: vix?.changePct ?? 0 },
-    dxy: { price: dxyPrice, chg: dxy?.changePct ?? 0 },
-    tnx: { price: tnxLevel, chg: tnx?.changePct ?? 0 },
-    spyVs20: spyEma21 && spyPrice > spyEma21 ? 'above' : 'below',
-    spyVs50: spySma89 && spyPrice > spySma89 ? 'above' : 'below',
-    spyVs200: spySma233 && spyPrice > spySma233 ? 'above' : 'below',
-    spyEma21AboveSma89: !!(spyEma21 && spySma89 && spyEma21 > spySma89),
-    spySma89AboveSma233: !!(spySma89 && spySma233 && spySma89 > spySma233),
-    qqqVs50: qqqSma89 ? (qqqPrice > qqqSma89 ? 'above' : 'below') : 'unknown',
-    spyRSI,
-    regime,
-    vixLevel,
-    vixSlope,
-    vixPercentile: estimateVixPercentile(vixLevel),
-    breadthMode: breadth.mode,
-    pctAbove20: breadth.pctAbove20,
-    pctAbove50: breadth.pctAbove50,
-    pctAbove200: breadth.pctAbove200,
-    adRatio: breadth.adRatio,
-    nasdaqHL: breadth.nasdaqHL,
-    participation: breadth.participation,
-    tenYrLevel: tnxLevel,
-    tenYrTrend,
-    dxyTrend,
-    fedStance: 'neutral',
-    macroMode: 'partial',
-    putCallMode: 'unavailable',
-    fomc72hr: false,
-    marketOpen: marketStatus.open,
-    marketStatus: marketStatus.label,
-    sectors,
-    lastUpdated: new Date().toISOString(),
-    dataSource: 'Yahoo Finance (live)'
+    spy: { price: spyPrice, chg: spy?.changePct ?? 0, dollar: spy?.change ?? 0 }, qqq: { price: qqqPrice, chg: qqq?.changePct ?? 0, dollar: qqq?.change ?? 0 },
+    vix: { price: vixLevel, chg: vix?.changePct ?? 0 }, dxy: { price: dxyPrice, chg: dxy?.changePct ?? 0 }, tnx: { price: tnxLevel, chg: tnx?.changePct ?? 0 },
+    spyVs20: spyEma21 && spyPrice > spyEma21 ? 'above' : 'below', spyVs50: spySma89 && spyPrice > spySma89 ? 'above' : 'below', spyVs200: spySma233 && spyPrice > spySma233 ? 'above' : 'below',
+    spyEma21AboveSma89: !!(spyEma21 && spySma89 && spyEma21 > spySma89), spySma89AboveSma233: !!(spySma89 && spySma233 && spySma89 > spySma233), qqqVs50: qqqSma89 ? (qqqPrice > qqqSma89 ? 'above' : 'below') : 'unknown',
+    spyRSI, regime, vixLevel, vixSlope, vixPercentile: estimateVixPercentile(vixLevel), breadthMode: breadth.mode,
+    pctAbove20: breadth.pctAbove20, pctAbove50: breadth.pctAbove50, pctAbove200: breadth.pctAbove200, adRatio: breadth.adRatio, nasdaqHL: breadth.nasdaqHL, participation: breadth.participation,
+    tenYrLevel: tnxLevel, tenYrTrend, dxyTrend, fedStance: 'neutral', macroMode: 'partial', putCallMode: 'unavailable', fomc72hr: false, marketOpen: marketStatus.open, marketStatus: marketStatus.label,
+    sectors, lastUpdated: new Date().toISOString(), dataSource: 'Yahoo Finance (live)', spyHistory
   };
+}
+
+async function buildWatchlistData(spyHistory, marketDecision) {
+  const stocks = await Promise.all(WATCHLIST.map(async (symbol) => {
+    const [history, quote] = await Promise.all([fetchYahooHistory(symbol, 400), fetchSingleQuote(symbol, 'WL_' + symbol)]);
+    if (!quote || history.length < 20) return null;
+    const price = quote.price;
+    const ema8 = calcEMA(history, 8), ema21 = calcEMA(history, 21), sma89 = calcSMA(history, 89), sma233 = calcSMA(history, 233), rsi = calcRSI(history, 14);
+    const stockPerf20 = history.length >= 20 ? ((history[history.length - 1] - history[history.length - 20]) / history[history.length - 20]) * 100 : 0;
+    const spyPerf20 = spyHistory.length >= 20 ? ((spyHistory[spyHistory.length - 1] - spyHistory[spyHistory.length - 20]) / spyHistory[spyHistory.length - 20]) * 100 : 0;
+    const relStrength = Math.round((stockPerf20 - spyPerf20) * 100) / 100;
+    const verdictData = buildStockVerdict({ price, ema8, ema21, sma89, sma233, rsi, relStrength, changePct: quote.changePct, history, spyHistory, marketDecision });
+    const reasons = [];
+    if (sma233) reasons.push(price > sma233 ? 'Above SMA 233' : 'Below SMA 233');
+    if (relStrength > 2) reasons.push(`Outperforming SPY +${relStrength.toFixed(1)}%`); else if (relStrength < -2) reasons.push(`Underperforming SPY ${relStrength.toFixed(1)}%`);
+    if (rsi > 50 && rsi < 70) reasons.push(`RSI healthy (${rsi})`);
+    const signal = buildWatchlistSignal({ ...verdictData, vs20: ema21 ? (price > ema21 ? 'above' : 'below') : 'unknown', vs50: sma89 ? (price > sma89 ? 'above' : 'below') : 'unknown', vs200: sma233 ? (price > sma233 ? 'above' : 'below') : 'unknown', rsi, relStrength }, marketDecision);
+    return {
+      symbol, price, changePct: quote.changePct, change: quote.change, ema8, ema21, sma89, sma233,
+      vs20: ema21 ? (price > ema21 ? 'above' : 'below') : 'unknown', vs50: sma89 ? (price > sma89 ? 'above' : 'below') : 'unknown', vs200: sma233 ? (price > sma233 ? 'above' : 'below') : 'unknown',
+      rsi, relStrength, reasons: reasons.slice(0, 3), signal, ...verdictData
+    };
+  }));
+  return stocks.filter(Boolean).sort((a, b) => b.combinedScore - a.combinedScore);
 }
 
 async function getMarketPayload() {
   const now = Date.now();
   if (cache.data && now - cache.ts < CACHE_TTL) return cache.data;
-
   const marketData = await buildMarketData();
   const feedQuality = getFeedQuality(feedHealth);
   const systemStatus = buildSystemStatus({ marketData, feedQuality });
   const confidence = buildConfidence({ marketData, feedQuality, systemStatus });
-
   let payload;
   if (systemStatus.suppressDecision) {
-    payload = {
-      status: 'unavailable',
-      timestamp: new Date().toISOString(),
-      modelVersion: 'market-v1',
-      systemStatus,
-      confidenceScore: confidence.confidenceScore,
-      confidenceLabel: confidence.confidenceLabel,
-      confidenceReasons: confidence.confidenceReasons,
-      dataQuality: {
-        label: feedQuality.label,
-        staleFeeds: feedQuality.stale,
-        errors: feedQuality.errors,
-        proxyInputs: marketData.breadthMode === 'proxy' ? ['breadth'] : [],
-        missingInputs: ['putCall']
-      },
-      market: {
-        spy: marketData.spy,
-        qqq: marketData.qqq,
-        vix: marketData.vix,
-        dxy: marketData.dxy,
-        tnx: marketData.tnx
-      }
-    };
+    payload = { status: 'unavailable', timestamp: new Date().toISOString(), modelVersion: 'market-v1', systemStatus, confidenceScore: confidence.confidenceScore, confidenceLabel: confidence.confidenceLabel, confidenceReasons: confidence.confidenceReasons, dataQuality: { label: feedQuality.label, staleFeeds: feedQuality.stale, errors: feedQuality.errors, proxyInputs: marketData.breadthMode === 'proxy' ? ['breadth'] : [], missingInputs: ['putCall'] }, market: { spy: marketData.spy, qqq: marketData.qqq, vix: marketData.vix, dxy: marketData.dxy, tnx: marketData.tnx } };
   } else {
     const score = buildMarketScore(marketData);
-    payload = {
-      status: systemStatus.status,
-      timestamp: new Date().toISOString(),
-      modelVersion: score.modelVersion,
-      decision: score.decision,
-      score: score.weightedScore,
-      summary: score.summary,
-      guidance: score.guidance,
-      topReasons: score.topReasons,
-      blockers: score.blockers,
-      categoryScores: score.categoryScores,
-      vetoFlags: score.vetoFlags,
-      confidenceScore: confidence.confidenceScore,
-      confidenceLabel: confidence.confidenceLabel,
-      confidenceReasons: confidence.confidenceReasons,
-      systemStatus,
-      dataQuality: {
-        label: feedQuality.label,
-        staleFeeds: feedQuality.stale,
-        errors: feedQuality.errors,
-        proxyInputs: marketData.breadthMode === 'proxy' ? ['breadth'] : [],
-        missingInputs: ['putCall']
-      },
-      market: {
-        spy: marketData.spy,
-        qqq: marketData.qqq,
-        vix: marketData.vix,
-        dxy: marketData.dxy,
-        tnx: marketData.tnx
-      }
-    };
+    payload = { status: systemStatus.status, timestamp: new Date().toISOString(), modelVersion: score.modelVersion, decision: score.decision, score: score.weightedScore, summary: score.summary, guidance: score.guidance, topReasons: score.topReasons, blockers: score.blockers, categoryScores: score.categoryScores, vetoFlags: score.vetoFlags, confidenceScore: confidence.confidenceScore, confidenceLabel: confidence.confidenceLabel, confidenceReasons: confidence.confidenceReasons, systemStatus, dataQuality: { label: feedQuality.label, staleFeeds: feedQuality.stale, errors: feedQuality.errors, proxyInputs: marketData.breadthMode === 'proxy' ? ['breadth'] : [], missingInputs: ['putCall'] }, market: { spy: marketData.spy, qqq: marketData.qqq, vix: marketData.vix, dxy: marketData.dxy, tnx: marketData.tnx }, spyHistory: marketData.spyHistory };
   }
-
   cache = { data: payload, ts: now };
   return payload;
+}
+
+async function getWatchlistPayload() {
+  const now = Date.now();
+  const market = await getMarketPayload();
+  if (watchlistCache.data && now - watchlistCache.ts < WATCHLIST_CACHE_TTL && watchlistCache.marketDecision === market.decision) return { stocks: watchlistCache.data, cached: true };
+  if (!market.spyHistory) throw new Error('Missing SPY history for watchlist');
+  const stocks = await buildWatchlistData(market.spyHistory, market.decision || 'NO');
+  watchlistCache = { data: stocks, ts: now, marketDecision: market.decision };
+  return { stocks, cached: false };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -289,14 +204,14 @@ const server = http.createServer(async (req, res) => {
   const parsed = url.parse(req.url, true);
 
   if (parsed.pathname === '/api/market') {
-    try {
-      const data = await getMarketPayload();
-      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, max-age=0' });
-      res.end(JSON.stringify(data));
-    } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'unavailable', error: err.message }));
-    }
+    try { const data = await getMarketPayload(); res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, max-age=0' }); res.end(JSON.stringify(data)); }
+    catch (err) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ status: 'unavailable', error: err.message })); }
+    return;
+  }
+
+  if (parsed.pathname === '/api/watchlist') {
+    try { const data = await getWatchlistPayload(); res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, max-age=0' }); res.end(JSON.stringify(data)); }
+    catch (err) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: err.message })); }
     return;
   }
 
