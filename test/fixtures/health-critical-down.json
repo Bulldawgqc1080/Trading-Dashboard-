@@ -1,0 +1,5 @@
+{
+  "SPY": { "status": "error", "ts": 0, "error": "failed" },
+  "QQQ": { "status": "ok", "ts": 0 },
+  "VIX": { "status": "ok", "ts": 0 }
+}

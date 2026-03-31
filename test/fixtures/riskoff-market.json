@@ -1,0 +1,26 @@
+{
+  "vixLevel": 31,
+  "vixSlope": 1.2,
+  "vixPercentile": 84,
+  "spyVs200": "below",
+  "spyVs50": "below",
+  "spyVs20": "below",
+  "qqqVs50": "below",
+  "regime": "downtrend",
+  "spyEma21AboveSma89": false,
+  "spySma89AboveSma233": false,
+  "spyRSI": 34,
+  "pctAbove50": 28,
+  "pctAbove200": 22,
+  "adRatio": 0.82,
+  "nasdaqHL": 31,
+  "tenYrLevel": 4.75,
+  "tenYrTrend": "rising",
+  "dxyTrend": "rising",
+  "fedStance": "neutral",
+  "fomc72hr": true,
+  "sectors": [
+    {"sym":"XLU","chg":0.9},{"sym":"XLP","chg":0.6},{"sym":"XLV","chg":0.2},{"sym":"XLE","chg":-0.1},{"sym":"XLB","chg":-0.4},
+    {"sym":"XLI","chg":-0.7},{"sym":"XLF","chg":-1.0},{"sym":"XLC","chg":-1.2},{"sym":"XLY","chg":-1.5},{"sym":"XLK","chg":-1.8},{"sym":"XLRE","chg":-2.0}
+  ]
+}
