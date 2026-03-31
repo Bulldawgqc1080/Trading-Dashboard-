@@ -1,7 +1,7 @@
 {
   "name": "sibt",
-  "version": "1.0.0",
-  "description": "Should I Be Trading? — Market environment dashboard for swing traders",
+  "version": "2.0.0",
+  "description": "Should I Be Trading? — reliability-first market environment dashboard for swing traders",
   "scripts": {
     "start": "node api/server.js",
     "dev": "node api/server.js"
