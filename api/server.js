@@ -68,21 +68,13 @@ async function fetchSingleQuote(symbol, feedKey) {
     const todayEpoch = todayTs.getTime() / 1000;
     let prev = 0;
     for (let i = timestamps.length - 1; i >= 0; i--) {
-      if (timestamps[i] < todayEpoch && closes[i] !== null && !isNaN(closes[i])) {
-        prev = closes[i]; break;
-      }
+      if (timestamps[i] < todayEpoch && closes[i] !== null && !isNaN(closes[i])) { prev = closes[i]; break; }
     }
     if (!prev) prev = meta.chartPreviousClose || validCloses[validCloses.length - 2] || price;
     const change = price - prev;
     const changePct = prev > 0 ? (change / prev) * 100 : 0;
     feedHealth[feedKey] = { status: 'ok', ts: Date.now(), latency: Date.now() - start, price };
-    return {
-      price: Math.round(price * 100) / 100,
-      change: Math.round(change * 100) / 100,
-      changePct: Math.round(changePct * 100) / 100,
-      prev: Math.round(prev * 100) / 100,
-      closes: validCloses
-    };
+    return { price: Math.round(price * 100) / 100, change: Math.round(change * 100) / 100, changePct: Math.round(changePct * 100) / 100, prev: Math.round(prev * 100) / 100, closes: validCloses };
   } catch (e) {
     feedHealth[feedKey] = { status: 'error', error: e.message, ts: Date.now(), latency: Date.now() - start };
     return null;
@@ -153,17 +145,9 @@ async function buildWatchlistData(spyHistory, marketDecision) {
     const stockPerf20 = history.length >= 20 ? ((history[history.length - 1] - history[history.length - 20]) / history[history.length - 20]) * 100 : 0;
     const spyPerf20 = spyHistory.length >= 20 ? ((spyHistory[spyHistory.length - 1] - spyHistory[spyHistory.length - 20]) / spyHistory[spyHistory.length - 20]) * 100 : 0;
     const relStrength = Math.round((stockPerf20 - spyPerf20) * 100) / 100;
-    const verdictData = buildStockVerdict({ price, ema8, ema21, sma89, sma233, rsi, relStrength, changePct: quote.changePct, history, spyHistory, marketDecision });
-    const reasons = [];
-    if (sma233) reasons.push(price > sma233 ? 'Above SMA 233' : 'Below SMA 233');
-    if (relStrength > 2) reasons.push(`Outperforming SPY +${relStrength.toFixed(1)}%`); else if (relStrength < -2) reasons.push(`Underperforming SPY ${relStrength.toFixed(1)}%`);
-    if (rsi > 50 && rsi < 70) reasons.push(`RSI healthy (${rsi})`);
+    const verdictData = buildStockVerdict({ symbol, price, ema8, ema21, sma89, sma233, rsi, relStrength, changePct: quote.changePct, history, marketDecision });
     const signal = buildWatchlistSignal({ ...verdictData, vs20: ema21 ? (price > ema21 ? 'above' : 'below') : 'unknown', vs50: sma89 ? (price > sma89 ? 'above' : 'below') : 'unknown', vs200: sma233 ? (price > sma233 ? 'above' : 'below') : 'unknown', rsi, relStrength }, marketDecision);
-    return {
-      symbol, price, changePct: quote.changePct, change: quote.change, ema8, ema21, sma89, sma233,
-      vs20: ema21 ? (price > ema21 ? 'above' : 'below') : 'unknown', vs50: sma89 ? (price > sma89 ? 'above' : 'below') : 'unknown', vs200: sma233 ? (price > sma233 ? 'above' : 'below') : 'unknown',
-      rsi, relStrength, reasons: reasons.slice(0, 3), signal, ...verdictData
-    };
+    return { symbol, price, changePct: quote.changePct, change: quote.change, ema8, ema21, sma89, sma233, vs20: ema21 ? (price > ema21 ? 'above' : 'below') : 'unknown', vs50: sma89 ? (price > sma89 ? 'above' : 'below') : 'unknown', vs200: sma233 ? (price > sma233 ? 'above' : 'below') : 'unknown', rsi, relStrength, signal, ...verdictData };
   }));
   return stocks.filter(Boolean).sort((a, b) => b.combinedScore - a.combinedScore);
 }
