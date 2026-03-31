@@ -2,78 +2,14 @@ const http = require('http');
 const https = require('https');
 const url = require('url');
 
-const PORT = process.env.PORT || 3001;
-const CACHE_TTL = 30000;
-const STALE_THRESHOLD = 5 * 60 * 1000;
+const { PORT, CACHE_TTL } = require('../lib/config');
+const { calcSMA, calcEMA, calcRSI, calcSlope, calcTrend } = require('../lib/indicators');
+const { buildMarketScore, estimateVixPercentile } = require('../lib/scoring/market');
+const { buildConfidence } = require('../lib/scoring/confidence');
+const { getFeedQuality, buildSystemStatus } = require('../lib/health');
 
 let cache = { data: null, ts: 0 };
-let cryptoCache = { data: null, ts: 0 };
-const CRYPTO_CACHE_TTL = 60000;
-let scoreHistory = [];
 let feedHealth = {};
-let journal = [];
-let breadthCache = { data: null, ts: 0 };
-const BREADTH_CACHE_TTL = 5 * 60 * 1000;
-const BREADTH_UNIVERSE = [
-  'AAPL','MSFT','NVDA','AMZN','GOOGL','GOOG','META','BRK-B','LLY','AVGO',
-  'JPM','XOM','UNH','V','MA','COST','JNJ','PG','HD','ABBV',
-  'BAC','KO','MRK','PEP','CVX','ADBE','NFLX','CRM','AMD','WMT',
-  'ACN','CSCO','TMO','MCD','ABT','DHR','LIN','INTU','CMCSA','WFC',
-  'TXN','AMGN','PM','DIS','NEE','INTC','RTX','UNP','IBM','QCOM',
-  'CAT','SPGI','NOW','GE','LOW','ISRG','HON','VRTX','GS','PFE',
-  'BLK','BKNG','AXP','SYK','TJX','PLD','AMAT','SCHW','MDT','LMT',
-  'DE','ADP','GILD','C','MMC','MO','CB','T','SO','DUK',
-  'CI','MDLZ','REGN','ADI','PANW','ETN','ELV','ZTS','CL','BDX'
-];
-
-// Upstash Redis REST API
-const UPSTASH_URL = process.env.KV_REST_API_URL;
-const UPSTASH_TOKEN = process.env.KV_REST_API_TOKEN;
-
-function httpsGetWithAuth(reqUrl, token) {
-  return new Promise((resolve, reject) => {
-    const opts = new URL(reqUrl);
-    const options = {
-      hostname: opts.hostname,
-      path: opts.pathname + opts.search,
-      headers: { 'Authorization': 'Bearer ' + token }
-    };
-    const req = https.get(options, (res) => {
-      let data = '';
-      res.on('data', c => data += c);
-      res.on('end', () => { try { resolve(JSON.parse(data)); } catch(e) { resolve(null); } });
-    });
-    req.on('error', reject);
-    req.setTimeout(5000, () => { req.destroy(); reject(new Error('KV timeout')); });
-  });
-}
-
-async function kvGet(key) {
-  if (!UPSTASH_URL || !UPSTASH_TOKEN) return null;
-  try {
-    const res = await httpsGetWithAuth(UPSTASH_URL + '/get/' + key, UPSTASH_TOKEN);
-    return res && res.result ? JSON.parse(res.result) : null;
-  } catch(e) { return null; }
-}
-
-async function kvSet(key, value) {
-  if (!UPSTASH_URL || !UPSTASH_TOKEN) return;
-  try {
-    const encoded = encodeURIComponent(JSON.stringify(value));
-    await httpsGetWithAuth(UPSTASH_URL + '/set/' + key + '/' + encoded, UPSTASH_TOKEN);
-  } catch(e) {}
-}
-
-async function loadJournal() {
-  const stored = await kvGet('sibt:journal');
-  if (stored && Array.isArray(stored)) journal = stored;
-}
-
-async function saveJournal() {
-  await kvSet('sibt:journal', journal);
-}
-
-loadJournal().catch(() => {});
 
 function httpsGet(reqUrl) {
   return new Promise((resolve, reject) => {
@@ -82,7 +18,7 @@ function httpsGet(reqUrl) {
       hostname: opts.hostname,
       path: opts.pathname + opts.search,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120',
+        'User-Agent': 'Mozilla/5.0',
         'Accept': 'application/json,text/html,*/*',
         'Accept-Language': 'en-US,en;q=0.9'
       }
@@ -92,7 +28,7 @@ function httpsGet(reqUrl) {
       res.on('data', c => data += c);
       res.on('end', () => {
         try { resolve(JSON.parse(data)); }
-        catch(e) { reject(new Error('Parse error: ' + data.slice(0,300))); }
+        catch (e) { reject(new Error('Parse error: ' + data.slice(0, 300))); }
       });
     });
     req.on('error', reject);
@@ -114,11 +50,11 @@ async function fetchSingleQuote(symbol, feedKey) {
   try {
     const period2 = Math.floor(Date.now() / 1000);
     const period1 = period2 - (7 * 24 * 3600);
-    const u = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=1d&includePrePost=true&indicators=adjclose&events=div,splits`;
+    const u = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=1d&includePrePost=true`;
     const data = await httpsGet(u);
     const result = data?.chart?.result?.[0];
     if (!result) {
-      feedHealth[feedKey] = { status: 'error', error: 'No result', ts: Date.now(), latency: Date.now()-start };
+      feedHealth[feedKey] = { status: 'error', error: 'No result', ts: Date.now(), latency: Date.now() - start };
       return null;
     }
     const meta = result.meta || {};
@@ -126,7 +62,6 @@ async function fetchSingleQuote(symbol, feedKey) {
     const timestamps = result.timestamp || [];
     const validCloses = closes.filter(c => c !== null && !isNaN(c));
     const price = meta.regularMarketPrice || validCloses[validCloses.length - 1] || 0;
-    // Find yesterday's official close using timestamps to avoid including today's intraday
     const todayTs = new Date(); todayTs.setHours(0,0,0,0);
     const todayEpoch = todayTs.getTime() / 1000;
     let prev = 0;
@@ -138,93 +73,21 @@ async function fetchSingleQuote(symbol, feedKey) {
     if (!prev) prev = meta.chartPreviousClose || validCloses[validCloses.length - 2] || price;
     const change = price - prev;
     const changePct = prev > 0 ? (change / prev) * 100 : 0;
-    const ma200raw = meta.twoHundredDayAverage || meta.regularMarketDayLow || 0;
-    const ma50raw = meta.fiftyDayAverage || 0;
-    feedHealth[feedKey] = { status: 'ok', ts: Date.now(), latency: Date.now()-start, price };
-    // Extended hours from chart meta
-    const n2 = v => Number.isFinite(v) ? Math.round(v * 100) / 100 : null;
-    const postPrice = n2(meta.postMarketPrice);
-    const prePrice = n2(meta.preMarketPrice);
-    const hasPost = postPrice != null;
-    const hasPre = prePrice != null && !hasPost;
-    const extPrice = hasPost ? postPrice : hasPre ? prePrice : null;
-    const extChange = hasPost ? n2(meta.postMarketChange) : hasPre ? n2(meta.preMarketChange) : null;
-    const extChangePct = hasPost ? n2(meta.postMarketChangePercent) : hasPre ? n2(meta.preMarketChangePercent) : null;
-    const extType = hasPost ? 'POST' : hasPre ? 'PRE' : null;
-
+    feedHealth[feedKey] = { status: 'ok', ts: Date.now(), latency: Date.now() - start, price };
     return {
       price: Math.round(price * 100) / 100,
       change: Math.round(change * 100) / 100,
       changePct: Math.round(changePct * 100) / 100,
       prev: Math.round(prev * 100) / 100,
-      ma200: Math.round(ma200raw * 100) / 100,
-      ma50: Math.round(ma50raw * 100) / 100,
-      closes: validCloses,
-      extPrice, extChange, extChangePct, extType
+      closes: validCloses
     };
-  } catch(e) {
-    feedHealth[feedKey] = { status: 'error', error: e.message, ts: Date.now(), latency: Date.now()-start };
+  } catch (e) {
+    feedHealth[feedKey] = { status: 'error', error: e.message, ts: Date.now(), latency: Date.now() - start };
     return null;
   }
 }
 
-function calcSMA(data, period) {
-  if (!data || data.length < period) return null;
-  const slice = data.slice(-period);
-  return slice.reduce((a, b) => a + b, 0) / period;
-}
-
-function calcEMA(closes, period) {
-  if (!closes || closes.length < period) return null;
-  const k = 2 / (period + 1);
-  let ema = closes.slice(0, period).reduce((a, b) => a + b, 0) / period;
-  for (let i = period; i < closes.length; i++) {
-    ema = closes[i] * k + ema * (1 - k);
-  }
-  return Math.round(ema * 100) / 100;
-}
-
-function calcRSI(closes, period) {
-  period = period || 14;
-  if (!closes || closes.length < period + 1) return 50;
-  let gains = 0, losses = 0;
-  for (let i = closes.length - period; i < closes.length; i++) {
-    const diff = closes[i] - closes[i - 1];
-    if (diff > 0) gains += diff;
-    else losses += Math.abs(diff);
-  }
-  const avgGain = gains / period;
-  const avgLoss = losses / period;
-  if (avgLoss === 0) return 100;
-  return Math.round(100 - (100 / (1 + avgGain / avgLoss)));
-}
-
-function calcSlope(arr, n) {
-  n = n || 5;
-  const slice = arr.slice(-n);
-  if (slice.length < 2) return 0;
-  return Math.round(((slice[slice.length - 1] - slice[0]) / slice[0]) * 1000) / 10;
-}
-
-function calcTrend(closes, shortN, longN) {
-  if (!closes || closes.length < longN) return 'flat';
-  const shortAvg = closes.slice(-shortN).reduce((a,b) => a+b, 0) / shortN;
-  const longAvg = closes.slice(-longN).reduce((a,b) => a+b, 0) / longN;
-  const pctDiff = ((shortAvg - longAvg) / longAvg) * 100;
-  if (pctDiff > 0.3) return 'rising';
-  if (pctDiff < -0.3) return 'falling';
-  return 'flat';
-}
-
-function estimateVixPercentile(vix) {
-  if (vix < 12) return 5; if (vix < 14) return 12; if (vix < 16) return 22;
-  if (vix < 18) return 32; if (vix < 20) return 42; if (vix < 22) return 52;
-  if (vix < 25) return 62; if (vix < 30) return 75; if (vix < 35) return 85;
-  if (vix < 40) return 92; return 98;
-}
-
 function estimateBreadth(spyChgPct, sectorChanges) {
-  // Proxy only: sector participation + SPY day tone. Do not treat as true exchange breadth.
   const upSectors = sectorChanges.filter(c => c > 0).length;
   const sectorCount = sectorChanges.length || 1;
   const participation = (upSectors / sectorCount) * 100;
@@ -234,7 +97,6 @@ function estimateBreadth(spyChgPct, sectorChanges) {
   const pctAboveSma233 = Math.max(10, Math.min(70, pctAboveSma89 - 6));
   const adRatioProxy = Math.round((0.8 + (upSectors / sectorCount) * 0.8) * 100) / 100;
   const highsLowsProxy = Math.round(30 + (upSectors / sectorCount) * 50);
-
   return {
     mode: 'proxy',
     pctAbove20: Math.round(pctAboveEma21),
@@ -247,876 +109,176 @@ function estimateBreadth(spyChgPct, sectorChanges) {
   };
 }
 
-function getFomcDays() {
-  const fomcDates = [
-    new Date('2026-03-19'), new Date('2026-05-06'), new Date('2026-06-17'),
-    new Date('2026-07-29'), new Date('2026-09-16'), new Date('2026-11-04'), new Date('2026-12-16'),
-  ];
-  const now = new Date();
-  const next = fomcDates.find(d => d > now);
-  if (!next) return 99;
-  return Math.ceil((next - now) / (1000 * 60 * 60 * 24));
-}
-
 function getMarketStatus() {
   const now = new Date();
   const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
+    timeZone: 'America/New_York', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false
   }).formatToParts(now);
-
   const map = Object.fromEntries(parts.map(p => [p.type, p.value]));
   const weekday = map.weekday;
   const hour = parseInt(map.hour, 10);
   const minute = parseInt(map.minute, 10);
   const timeNum = hour * 100 + minute;
-
   if (weekday === 'Sat' || weekday === 'Sun') return { open: false, label: 'WEEKEND' };
   if (timeNum < 930) return { open: false, label: 'PRE-MARKET' };
   if (timeNum >= 1600) return { open: false, label: 'AFTER-HOURS' };
   return { open: true, label: 'MARKET OPEN' };
 }
 
-function getFeedQuality() {
-  const now = Date.now();
-  const criticalFeeds = ['SPY', 'QQQ', 'VIX'];
-  const errors = Object.entries(feedHealth).filter(([k,v]) => v.status === 'error');
-  const stale = Object.entries(feedHealth).filter(([k,v]) => v.status === 'ok' && (now - v.ts) > STALE_THRESHOLD);
-  const criticalDown = criticalFeeds.filter(f => feedHealth[f] && feedHealth[f].status === 'error');
-  if (criticalDown.length > 0) return { quality: 'bad', label: 'DATA QUALITY: BAD', errors: errors.map(([k])=>k), stale: stale.map(([k])=>k) };
-  if (errors.length > 2 || stale.length > 3) return { quality: 'degraded', label: 'DATA QUALITY: DEGRADED', errors: errors.map(([k])=>k), stale: stale.map(([k])=>k) };
-  if (stale.length > 0) return { quality: 'stale', label: 'SOME FEEDS STALE', errors: [], stale: stale.map(([k])=>k) };
-  return { quality: 'good', label: 'ALL FEEDS OK', errors: [], stale: [] };
-}
-
-function calcScoresServer(d) {
-  const vixRaw = d.vixLevel < 15 ? 90 : d.vixLevel < 18 ? 80 : d.vixLevel < 20 ? 72 :
-    d.vixLevel < 23 ? 58 : d.vixLevel < 27 ? 42 : d.vixLevel < 32 ? 28 : 12;
-  let vix = vixRaw;
-  if (d.vixSlope < -0.5) vix = Math.min(100, vix + 8);
-  if (d.vixSlope > 0.5) vix = Math.max(0, vix - 8);
-  if (d.vixPercentile < 30) vix = Math.min(100, vix + 5);
-  if (d.vixPercentile > 70) vix = Math.max(0, vix - 10);
-
-  let trend = 0;
-  if (d.spyVs200 === 'above') trend += 25;
-  if (d.spyVs50 === 'above') trend += 20;
-  if (d.spyVs20 === 'above') trend += 15;
-  if (d.qqqVs50 === 'above') trend += 15;
-  if (d.regime === 'uptrend') trend += 10;
-  if (d.spyEma21AboveSma89) trend += 8;
-  if (d.spySma89AboveSma233) trend += 7;
-  if (d.spyRSI > 30 && d.spyRSI < 70) trend = Math.min(100, trend + 8);
-  if (d.spyRSI >= 75) trend = Math.max(0, trend - 12);
-  if (d.spyRSI <= 25) trend = Math.max(0, trend - 18);
-
-  let breadth = 0;
-  breadth += Math.min(40, d.pctAbove50 * 0.55);
-  breadth += Math.min(20, d.pctAbove200 * 0.35);
-  breadth += d.adRatio > 1.2 ? 18 : d.adRatio > 1.0 ? 10 : 0;
-  breadth += d.nasdaqHL > 65 ? 10 : d.nasdaqHL > 50 ? 5 : 0;
-  breadth = Math.max(0, Math.min(100, breadth));
-
-  const upS = d.sectors.filter(s => s.chg > 0).length;
-  const top3 = (d.sectors[0].chg + d.sectors[1].chg + d.sectors[2].chg) / 3;
-  const btm3 = (d.sectors[8].chg + d.sectors[9].chg + d.sectors[10].chg) / 3;
-  const spread = top3 - btm3;
-  let momentum = Math.min(50, upS * 5) + Math.min(35, spread * 8);
-  if (d.sectors[0].sym === 'XLK' || d.sectors[1].sym === 'XLK') momentum += 10;
-  if (d.sectors[0].sym === 'XLU' || d.sectors[0].sym === 'XLP') momentum -= 12;
-  momentum = Math.max(0, Math.min(100, momentum));
-
-  let macro = d.tenYrLevel < 4.0 ? 35 : d.tenYrLevel < 4.3 ? 25 : d.tenYrLevel < 4.7 ? 15 : d.tenYrLevel < 5.2 ? 5 : -10;
-  macro += d.tenYrTrend === 'falling' ? 18 : d.tenYrTrend === 'rising' ? -12 : 0;
-  macro += d.dxyTrend === 'falling' ? 15 : d.dxyTrend === 'rising' ? -5 : 0;
-  macro += d.fedStance === 'dovish' ? 20 : d.fedStance === 'neutral' ? 5 : -18;
-  if (d.fomc72hr) macro -= 18;
-  macro = Math.max(0, Math.min(100, macro));
-
-  let total = Math.round(vix * 0.25 + momentum * 0.25 + trend * 0.20 + breadth * 0.20 + macro * 0.10);
-
-  const vetoFlags = [];
-  if (d.vixLevel > 28 && d.vixSlope > 0.5) vetoFlags.push('volatility shock');
-  if (d.spyVs50 === 'below' && d.spyVs200 === 'below') vetoFlags.push('trend breakdown');
-  if (d.pctAbove50 < 40 && d.adRatio < 1.0) vetoFlags.push('weak participation');
-  if (d.sectors[0].sym === 'XLU' || d.sectors[0].sym === 'XLP') vetoFlags.push('defensive leadership');
-
-  if (vetoFlags.length >= 2) total = Math.min(total, 44);
-  else if (vetoFlags.length === 1) total = Math.min(total, 69);
-
-  let decision = 'NO';
-  if (total >= 70) decision = 'YES';
-  else if (total >= 45) decision = 'CAUTION';
-
-  const factors = [
-    { name: 'Elevated VIX', impact: -1, active: d.vixLevel > 25 },
-    { name: 'VIX falling', impact: 1, active: d.vixSlope < -0.5 },
-    { name: 'VIX rising', impact: -1, active: d.vixSlope > 0.5 },
-    { name: 'SPY above SMA 233', impact: 1, active: d.spyVs200 === 'above' },
-    { name: 'SPY below SMA 233', impact: -1, active: d.spyVs200 === 'below' },
-    { name: 'SPY above SMA 89', impact: 1, active: d.spyVs50 === 'above' },
-    { name: 'SPY below SMA 89', impact: -1, active: d.spyVs50 === 'below' },
-    { name: 'Confirmed uptrend', impact: 1, active: d.regime === 'uptrend' },
-    { name: 'Trend under pressure', impact: -1, active: d.regime !== 'uptrend' },
-    { name: 'Healthy breadth proxy', impact: 1, active: d.pctAbove50 > 60 },
-    { name: 'Weak breadth proxy', impact: -1, active: d.pctAbove50 < 40 },
-    { name: 'Strong sector spread', impact: 1, active: spread > 1.5 },
-    { name: 'Narrow sector spread', impact: -1, active: spread < 0.5 },
-    { name: 'Tech leadership', impact: 1, active: d.sectors[0].sym === 'XLK' || d.sectors[1].sym === 'XLK' },
-    { name: 'Defensive leadership', impact: -1, active: d.sectors[0].sym === 'XLU' || d.sectors[0].sym === 'XLP' },
-    { name: 'Yields falling', impact: 1, active: d.tenYrTrend === 'falling' },
-    { name: 'Yields rising', impact: -1, active: d.tenYrTrend === 'rising' },
-    { name: 'Dollar falling', impact: 1, active: d.dxyTrend === 'falling' },
-    { name: 'FOMC imminent', impact: -1, active: d.fomc72hr },
-    { name: 'Most sectors green', impact: 1, active: upS >= 8 },
-    { name: 'Most sectors red', impact: -1, active: upS <= 3 },
-  ].filter(f => f.active);
-
-  const negFactors = factors.filter(f => f.impact < 0).slice(0, 3).map(f => f.name);
-  const posFactors = factors.filter(f => f.impact > 0).slice(0, 3).map(f => f.name);
-  const topReasons = decision === 'YES' ? posFactors.slice(0, 3) : negFactors.slice(0, 3);
-
-  return {
-    vix: Math.round(vix),
-    trend: Math.round(trend),
-    breadth: Math.round(breadth),
-    momentum: Math.round(momentum),
-    macro: Math.round(macro),
-    total,
-    decision,
-    vetoFlags,
-    topReasons
-  };
-}
-
-async function logJournalEntry(entry) {
-  const today = new Date().toISOString().split('T')[0];
-  const stored = await kvGet('sibt:journal');
-  if (stored && Array.isArray(stored)) journal = stored;
-
-  const existing = journal.find(j => j.date === today);
-  if (existing) {
-    existing.ts = existing.ts || Date.now();
-    existing.score = entry.score;
-    existing.decision = entry.decision;
-    existing.spyEntry = entry.spyEntry;
-    existing.qqqEntry = entry.qqqEntry;
-    existing.vixEntry = entry.vixEntry;
-    existing.breadthMode = entry.breadthMode;
-    existing.breadthSampleSize = entry.breadthSampleSize;
-    existing.regime = entry.regime;
-    existing.categoryScores = entry.categoryScores;
-    existing.topReasons = entry.topReasons;
-    existing.leadSectors = entry.leadSectors;
-    existing.laggardSector = entry.laggardSector;
-    if (existing.spyExit === undefined) existing.spyExit = null;
-    if (existing.outcome1d === undefined) existing.outcome1d = null;
-    if (existing.outcome5d === undefined) existing.outcome5d = null;
-    if (existing.outcome10d === undefined) existing.outcome10d = null;
-    await saveJournal();
-    return;
-  }
-
-  journal.push({
-    date: today,
-    ts: Date.now(),
-    score: entry.score,
-    decision: entry.decision,
-    spyEntry: entry.spyEntry,
-    qqqEntry: entry.qqqEntry,
-    vixEntry: entry.vixEntry,
-    breadthMode: entry.breadthMode,
-    breadthSampleSize: entry.breadthSampleSize,
-    regime: entry.regime,
-    categoryScores: entry.categoryScores,
-    topReasons: entry.topReasons,
-    leadSectors: entry.leadSectors,
-    laggardSector: entry.laggardSector,
-    spyExit: null,
-    outcome1d: null,
-    outcome5d: null,
-    outcome10d: null
-  });
-  if (journal.length > 180) journal = journal.slice(-180);
-  await saveJournal();
-}
-
-function addToScoreHistory(score, decision) {
-  const today = new Date().toISOString().split('T')[0];
-  if (!scoreHistory.find(h => h.date === today)) {
-    scoreHistory.push({ date: today, score, decision });
-    if (scoreHistory.length > 30) scoreHistory = scoreHistory.slice(-30);
-  }
-}
-
-function normalizeJournalEntry(j) {
-  return {
-    date: j.date,
-    ts: j.ts || Date.now(),
-    score: j.score ?? null,
-    decision: j.decision ?? null,
-    spyEntry: j.spyEntry ?? null,
-    qqqEntry: j.qqqEntry ?? null,
-    vixEntry: j.vixEntry ?? null,
-    breadthMode: j.breadthMode ?? null,
-    breadthSampleSize: j.breadthSampleSize ?? null,
-    regime: j.regime ?? null,
-    categoryScores: j.categoryScores ?? null,
-    topReasons: j.topReasons ?? [],
-    leadSectors: j.leadSectors ?? [],
-    laggardSector: j.laggardSector ?? null,
-    spyExit: j.spyExit ?? null,
-    outcome1d: j.outcome1d ?? null,
-    outcome5d: j.outcome5d ?? null,
-    outcome10d: j.outcome10d ?? null
-  };
-}
-
-async function normalizeJournal() {
-  if (!journal.length) return;
-  journal = journal.map(normalizeJournalEntry);
-  await saveJournal();
-}
-
-async function backfillJournalOutcomes() {
-  if (!journal.length) return;
-  try {
-    await normalizeJournal();
-    const closes = await fetchYahooHistory('SPY', 260);
-    if (!closes || closes.length < 15) return;
-
-    for (let i = 0; i < journal.length; i++) {
-      const j = journal[i];
-      if (!Number.isFinite(j.spyEntry) || (j.outcome1d != null && j.outcome5d != null && j.outcome10d != null)) continue;
-
-      let entryIdx = -1;
-      for (let k = 0; k < closes.length; k++) {
-        if (Math.abs(closes[k] - j.spyEntry) / j.spyEntry < 0.003) {
-          entryIdx = k;
-          break;
-        }
-      }
-      if (entryIdx === -1) continue;
-
-      const calcRet = (offset) => {
-        if (!closes[entryIdx + offset]) return null;
-        return Math.round((((closes[entryIdx + offset] - j.spyEntry) / j.spyEntry) * 100) * 100) / 100;
-      };
-
-      j.outcome1d = calcRet(1);
-      j.outcome5d = calcRet(5);
-      j.outcome10d = calcRet(10);
-      j.spyExit = closes[entryIdx + 1] ? Math.round(closes[entryIdx + 1] * 100) / 100 : null;
-    }
-
-    await saveJournal();
-  } catch(e) {}
-}
-
-function summarizeDecisionBucket(entries) {
-  const nums = (arr, key) => arr.map(x => x[key]).filter(v => typeof v === 'number');
-  const avg = (vals) => vals.length ? Math.round((vals.reduce((a,b) => a + b, 0) / vals.length) * 100) / 100 : null;
-  const winRate = (vals) => vals.length ? Math.round((vals.filter(v => v > 0).length / vals.length) * 100) : null;
-  const o1 = nums(entries, 'outcome1d');
-  const o5 = nums(entries, 'outcome5d');
-  const o10 = nums(entries, 'outcome10d');
-  return {
-    count: entries.length,
-    avg1d: avg(o1),
-    avg5d: avg(o5),
-    avg10d: avg(o10),
-    winRate1d: winRate(o1),
-    winRate5d: winRate(o5),
-    winRate10d: winRate(o10)
-  };
-}
-
-function buildBacktestSummary() {
-  const normalized = journal.map(normalizeJournalEntry);
-  const yes = normalized.filter(j => j.decision === 'YES');
-  const caution = normalized.filter(j => j.decision === 'CAUTION');
-  const no = normalized.filter(j => j.decision === 'NO');
-  return {
-    updatedAt: new Date().toISOString(),
-    totalEntries: normalized.length,
-    buckets: {
-      YES: summarizeDecisionBucket(yes),
-      CAUTION: summarizeDecisionBucket(caution),
-      NO: summarizeDecisionBucket(no)
-    },
-    recent: normalized.slice(-10)
-  };
-}
-
-async function fetchV7Quotes(symbols) {
-  try {
-    const symStr = symbols.join(',');
-    const u = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symStr}&fields=regularMarketPrice,regularMarketChangePercent,regularMarketChange,regularMarketPreviousClose,preMarketPrice,preMarketChange,preMarketChangePercent,postMarketPrice,postMarketChange,postMarketChangePercent,marketState`;
-    const data = await httpsGet(u);
-    const results = data?.quoteResponse?.result || [];
-    const map = {};
-    results.forEach(q => {
-      // Calculate pct from price and prev close for maximum accuracy
-      const n = v => Number.isFinite(v) ? Math.round(v * 100) / 100 : null;
-      const state = q.marketState || 'REGULAR';
-      const isPre = state === 'PRE' || state === 'PREPRE' || (state === 'REGULAR' && Number.isFinite(q.preMarketPrice) && !Number.isFinite(q.postMarketPrice));
-      const isPost = state === 'POST' || state === 'POSTPOST' || (state === 'REGULAR' && Number.isFinite(q.postMarketPrice));
-      map[q.symbol] = {
-        price: n(q.regularMarketPrice),
-        changePct: n(q.regularMarketChangePercent),
-        change: n(q.regularMarketChange),
-        prev: n(q.regularMarketPreviousClose),
-        marketState: state,
-        extPrice: isPre ? n(q.preMarketPrice) : isPost ? n(q.postMarketPrice) : null,
-        extChange: isPre ? n(q.preMarketChange) : isPost ? n(q.postMarketChange) : null,
-        extChangePct: isPre ? n(q.preMarketChangePercent) : isPost ? n(q.postMarketChangePercent) : null,
-        extType: isPre ? 'PRE' : isPost ? 'POST' : null
-      };
-    });
-    return map;
-  } catch(e) { return {}; }
-}
-
-async function fetchFearAndGreed() {
-  try {
-    const data = await httpsGet('https://api.alternative.me/fng/?limit=1');
-    const item = data?.data?.[0];
-    if (!item) return null;
-    return {
-      value: parseInt(item.value, 10),
-      label: item.value_classification,
-      ts: item.timestamp
-    };
-  } catch(e) { return null; }
-}
-
-async function computeRealBreadth() {
-  const now = Date.now();
-  if (breadthCache.data && (now - breadthCache.ts) < BREADTH_CACHE_TTL) {
-    return breadthCache.data;
-  }
-
-  const histories = await Promise.all(BREADTH_UNIVERSE.map(async (sym) => {
-    try {
-      const closes = await fetchYahooHistory(sym, 260);
-      if (!closes || closes.length < 233) return null;
-      const price = closes[closes.length - 1];
-      const prev = closes[closes.length - 2];
-      const ema21 = calcEMA(closes, 21);
-      const sma89 = calcSMA(closes, 89);
-      const sma233 = calcSMA(closes, 233);
-      const last20 = closes.slice(-20);
-      const prior20 = closes.slice(-21, -1);
-      const high20 = last20.length ? Math.max(...last20) : null;
-      const low20 = last20.length ? Math.min(...last20) : null;
-      const prevHigh20 = prior20.length ? Math.max(...prior20) : null;
-      const prevLow20 = prior20.length ? Math.min(...prior20) : null;
-      return {
-        sym,
-        price,
-        prev,
-        advancer: price > prev,
-        decliner: price < prev,
-        above21: ema21 != null && price > ema21,
-        above89: sma89 != null && price > sma89,
-        above233: sma233 != null && price > sma233,
-        newHigh20: prevHigh20 != null && price >= prevHigh20,
-        newLow20: prevLow20 != null && price <= prevLow20
-      };
-    } catch(e) {
-      return null;
-    }
-  }));
-
-  const valid = histories.filter(Boolean);
-  const minSample = 60;
-  if (valid.length < minSample) {
-    throw new Error('Breadth sample too small: ' + valid.length);
-  }
-
-  const total = valid.length;
-  const advancers = valid.filter(x => x.advancer).length;
-  const decliners = valid.filter(x => x.decliner).length;
-  const pctAbove21 = Math.round((valid.filter(x => x.above21).length / total) * 100);
-  const pctAbove89 = Math.round((valid.filter(x => x.above89).length / total) * 100);
-  const pctAbove233 = Math.round((valid.filter(x => x.above233).length / total) * 100);
-  const newHighs20d = valid.filter(x => x.newHigh20).length;
-  const newLows20d = valid.filter(x => x.newLow20).length;
-  const adRatio = decliners === 0 ? (advancers > 0 ? advancers : 1) : Math.round((advancers / decliners) * 100) / 100;
-  const highsLows = newHighs20d - newLows20d;
-
-  const breadth = {
-    mode: 'real',
-    universe: 'sp100-ish',
-    sampleSize: valid.length,
-    advancers,
-    decliners,
-    adRatio,
-    pctAbove20: pctAbove21,
-    pctAbove50: pctAbove89,
-    pctAbove200: pctAbove233,
-    pctAbove21,
-    pctAbove89,
-    pctAbove233,
-    newHighs20d,
-    newLows20d,
-    nasdaqHL: highsLows,
-    mcclellan: null,
-    participation: pctAbove21
-  };
-
-  breadthCache = { data: breadth, ts: now };
-  return breadth;
-}
-
-async function fetchCryptoData() {
-  const now = Date.now();
-  if (cryptoCache.data && now - cryptoCache.ts < CRYPTO_CACHE_TTL) {
-    return { ...cryptoCache.data, cached: true };
-  }
-
-  const COINS = ['BTC-USD', 'ETH-USD', 'SOL-USD'];
-
-  try {
-    const [v7Data, fng] = await Promise.all([
-      fetchV7Quotes([...COINS, 'SPY']),
-      fetchFearAndGreed()
-    ]);
-
-    // Build coin cards — fallback to fetchSingleQuote if v7 price is null
-    const coins = await Promise.all(COINS.map(async sym => {
-      const q = v7Data[sym] || {};
-      let price = q.price;
-      let changePct = q.changePct;
-      let change = q.change;
-      let prev = q.prev;
-
-      // Fallback: fetch via chart API if v7 didn't return price
-      if (price == null) {
-        try {
-          const fallback = await fetchSingleQuote(sym, 'CRYPTO_' + sym.replace('-USD',''));
-          if (fallback && fallback.price) {
-            price = fallback.price;
-            changePct = fallback.changePct;
-            change = fallback.change;
-            prev = fallback.prev;
-          }
-        } catch(e) {}
-      }
-
-      return {
-        symbol: sym.replace('-USD', ''),
-        price,
-        changePct,
-        change,
-        prev,
-        marketState: q.marketState
-      };
-    }));
-
-    // BTC dominance from CoinGecko
-    let btcDominance = null;
-    try {
-      const gcData = await httpsGet('https://api.coingecko.com/api/v3/global');
-      btcDominance = gcData?.data?.market_cap_percentage?.btc
-        ? Math.round(gcData.data.market_cap_percentage.btc * 10) / 10
-        : null;
-    } catch(e) {}
-
-    // SPY 20d correlation with BTC (simplified: compare direction of last 20d)
-    // Use changePct as a proxy since we don't store BTC history
-    const spyQ = v7Data['SPY'] || {};
-    const btcQ = v7Data['BTC-USD'] || {};
-    let correlation = null;
-    if (spyQ.changePct != null && btcQ.changePct != null) {
-      // Simple same-direction correlation for today
-      const sameDir = (spyQ.changePct >= 0) === (btcQ.changePct >= 0);
-      correlation = sameDir ? 'POSITIVE' : 'NEGATIVE';
-    }
-
-    const result = {
-      coins,
-      fearGreed: fng,
-      btcDominance,
-      spyCorrelation1d: correlation,
-      spyChg: spyQ.changePct,
-      lastUpdated: new Date().toISOString(),
-      cached: false
-    };
-
-    cryptoCache = { data: result, ts: now };
-    return result;
-  } catch(e) {
-    return cryptoCache.data ? { ...cryptoCache.data, cached: true } : null;
-  }
-}
-
 async function buildMarketData() {
   const sectorSyms = ['XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLU','XLB','XLRE','XLC'];
+  const sectorNames = { XLK:'Technology', XLF:'Financials', XLE:'Energy', XLV:'Health Care', XLI:'Industrials', XLY:'Cons Discret', XLP:'Cons Staples', XLU:'Utilities', XLB:'Materials', XLRE:'Real Estate', XLC:'Comm Services' };
 
-  const [spyData, qqqData, vixData, dxyData, tnxData, spyHistory, vixHistory, tnxHistory, dxyHistory, v7Quotes, ...sectorResults] = await Promise.all([
+  const [spy, qqq, vix, dxy, tnx, spyHistory, qqqHistory, vixHistory, tnxHistory, dxyHistory, ...sectorResults] = await Promise.all([
     fetchSingleQuote('SPY', 'SPY'),
     fetchSingleQuote('QQQ', 'QQQ'),
     fetchSingleQuote('^VIX', 'VIX'),
     fetchSingleQuote('DX-Y.NYB', 'DXY'),
     fetchSingleQuote('^TNX', 'TNX'),
     fetchYahooHistory('SPY', 300),
+    fetchYahooHistory('QQQ', 120),
     fetchYahooHistory('^VIX', 30),
     fetchYahooHistory('^TNX', 20),
     fetchYahooHistory('DX-Y.NYB', 20),
-    fetchV7Quotes(['SPY','QQQ','^VIX','DX-Y.NYB','^TNX','XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLU','XLB','XLRE','XLC']),
     ...sectorSyms.map(s => fetchSingleQuote(s, s))
   ]);
 
-  const spy = spyData || {};
-  const qqq = qqqData || {};
-  const vixQ = vixData || {};
-  const dxy = dxyData || {};
-  const tnx = tnxData || {};
+  const spyPrice = spy?.price || 0;
+  const qqqPrice = qqq?.price || 0;
+  const vixLevel = vix?.price || 0;
+  const dxyPrice = dxy?.price || 0;
+  const tnxLevel = tnx?.price || 0;
 
-  // SPY trend structure — Fibonacci MA stack (permission model, not entry scoring)
   const spyEma21 = calcEMA(spyHistory, 21);
   const spySma89 = calcSMA(spyHistory, 89);
   const spySma233 = calcSMA(spyHistory, 233);
-  // Keep legacy aliases for compatibility with return payload
-  const spy20 = spyEma21;
-  const spy50 = spySma89;
-  const spy200 = spySma233;
-  const spyRSI = calcRSI(spyHistory, 14);
-  // SPY MA alignment flags (for trend scoring)
-  const spyEma21AboveSma89 = spyEma21 && spySma89 && spyEma21 > spySma89;
-  const spySma89AboveSma233 = spySma89 && spySma233 && spySma89 > spySma233;
-  const vixSlope = calcSlope(vixHistory, 5);
-  // vixLevel, tnxLevel, dxyPrice now set from v7 above
-  // v7 as single source of truth — anchor % to prev+change from same quote packet
-  const spyV7 = v7Quotes['SPY'] || {};
-  const spyPrice = spyV7.price ?? spy.price ?? (spyHistory[spyHistory.length - 1] || 500);
-  // AH/PRE fallback: use chart meta ext fields if v7 didn't return them
-  const spyExtPrice = spyV7.extPrice ?? (spy && Number.isFinite(spy.extPrice) ? spy.extPrice : null);
-  const spyExtChange = spyV7.extChange ?? (spy && Number.isFinite(spy.extChange) ? spy.extChange : null);
-  const spyExtChangePct = spyV7.extChangePct ?? (spy && Number.isFinite(spy.extChangePct) ? spy.extChangePct : null);
-  const spyExtType = spyV7.extType ?? spy.extType ?? null;
-  // Use history array for prev close — avoids Yahoo's weekend/boundary stale prev bug
-  const histPrev = spyHistory.length >= 2 ? spyHistory[spyHistory.length - 2] : 0;
-  const spyPrev = (histPrev > 0 && Math.abs(spyPrice - histPrev) / histPrev < 0.10) ? histPrev : (spyV7.prev ?? spy.prev ?? 0);
-  const spyChg = spyV7.change ?? (spyPrev > 0 ? spyPrice - spyPrev : 0);
-  // Compute pct from history-derived prev for accuracy, fall back to v7
-  const spyChgPct = spyPrev > 0 ? ((spyPrice - spyPrev) / spyPrev) * 100 : (spyV7.changePct ?? 0);
-
-  const qqqV7 = v7Quotes['QQQ'] || {};
-  const qqqPrice = qqqV7.price ?? qqq.price ?? 0;
-  const qqqExtPrice = qqqV7.extPrice ?? (qqq && Number.isFinite(qqq.extPrice) ? qqq.extPrice : null);
-  const qqqExtChange = qqqV7.extChange ?? (qqq && Number.isFinite(qqq.extChange) ? qqq.extChange : null);
-  const qqqExtChangePct = qqqV7.extChangePct ?? (qqq && Number.isFinite(qqq.extChangePct) ? qqq.extChangePct : null);
-  const qqqExtType = qqqV7.extType ?? qqq.extType ?? null;
-  // Use QQQ history for prev close too
-  const qqqHistory = await fetchYahooHistory('QQQ', 100);
   const qqqSma89 = calcSMA(qqqHistory, 89);
-  const qqqHistPrev = qqqHistory.length >= 2 ? qqqHistory[qqqHistory.length - 2] : 0;
-  const qqqPrev = (qqqHistPrev > 0 && Math.abs(qqqPrice - qqqHistPrev) / qqqHistPrev < 0.10) ? qqqHistPrev : (qqqV7.prev ?? qqq.prev ?? 0);
-  const qqqChg = qqqPrice - qqqPrev;
-  const qqqChgPct = qqqPrev > 0 ? ((qqqPrice - qqqPrev) / qqqPrev) * 100 : (qqqV7.changePct ?? 0);
-
-  const vixV7 = v7Quotes['^VIX'] || {};
-  const vixLevel = vixV7.price ?? Math.round((vixQ.price || 20) * 100) / 100;
-  const vixPrev = vixV7.prev ?? vixQ.prev ?? 0;
-  const vixChg = vixV7.change ?? (vixPrev > 0 ? vixLevel - vixPrev : 0);
-  const vixChgPct = vixV7.changePct != null ? vixV7.changePct : (vixPrev > 0 ? (vixChg / vixPrev) * 100 : 0);
-
-  const dxyV7 = v7Quotes['DX-Y.NYB'] || {};
-  const dxyPrice = dxyV7.price ?? Math.round((dxy.price || 104) * 100) / 100;
-  const dxyPrev = dxyV7.prev ?? dxy.prev ?? 0;
-  const dxyChg = dxyV7.change ?? (dxyPrev > 0 ? dxyPrice - dxyPrev : 0);
-  const dxyChgPct = dxyV7.changePct != null ? dxyV7.changePct : (dxyPrev > 0 ? (dxyChg / dxyPrev) * 100 : 0);
-
-  const tnxV7 = v7Quotes['^TNX'] || {};
-  const tnxLevel = tnxV7.price ?? Math.round((tnx.price || 4.5) * 100) / 100;
-  const tnxPrev = tnxV7.prev ?? tnx.prev ?? 0;
-  const tnxChg = tnxV7.change ?? (tnxPrev > 0 ? tnxLevel - tnxPrev : 0);
-  const tnxChgPct = tnxV7.changePct != null ? tnxV7.changePct : (tnxPrev > 0 ? (tnxChg / tnxPrev) * 100 : 0);
-
-
-  const sectorNames = { XLK:'Technology', XLF:'Financials', XLE:'Energy', XLV:'Health Care',
-    XLI:'Industrials', XLY:'Cons Discret', XLP:'Cons Staples', XLU:'Utilities',
-    XLB:'Materials', XLRE:'Real Estate', XLC:'Comm Services' };
-
-  const sectors = sectorSyms.map((sym, i) => ({
-    sym, name: sectorNames[sym],
-    price: v7Quotes[sym]?.price ?? sectorResults[i]?.price ?? 0,
-    chg: Math.round((v7Quotes[sym]?.changePct ?? sectorResults[i]?.changePct ?? 0) * 100) / 100,
-    score: Math.min(100, Math.max(0, Math.round(50 + (v7Quotes[sym]?.changePct ?? sectorResults[i]?.changePct ?? 0) * 10)))
-  })).sort((a, b) => b.chg - a.chg);
-
-  const sectorChanges = sectors.map(s => s.chg);
-  let breadth;
-  try {
-    breadth = await computeRealBreadth();
-  } catch(e) {
-    breadth = {
-      ...estimateBreadth(spyChgPct, sectorChanges),
-      fallbackReason: e.message
-    };
-  }
+  const spyRSI = calcRSI(spyHistory, 14);
+  const vixSlope = calcSlope(vixHistory, 5);
   const tenYrTrend = calcTrend(tnxHistory, 3, 10);
   const dxyTrend = calcTrend(dxyHistory, 3, 10);
-  const regime = (spyPrice > spySma89 && spyPrice > spySma233 && spyRSI > 45) ? 'uptrend'
-    : (spyPrice < spySma89 && spyPrice < spySma233) ? 'downtrend' : 'chop';
-  const fomcDays = getFomcDays();
-  const marketStatus = getMarketStatus();
-  const feedQuality = getFeedQuality();
 
-  const marketData = {
-    spy: { price: Math.round(spyPrice * 100) / 100, chg: Math.round(spyChgPct * 100) / 100, dollar: Math.round(spyChg * 100) / 100, prev: Math.round(spyPrev * 100) / 100, extPrice: spyExtPrice, extChange: spyExtChange, extChangePct: spyExtChangePct, extType: spyExtType },
-    qqq: { price: Math.round(qqqPrice * 100) / 100, chg: Math.round(qqqChgPct * 100) / 100, dollar: Math.round(qqqChg * 100) / 100, prev: Math.round(qqqPrev * 100) / 100, extPrice: qqqExtPrice, extChange: qqqExtChange, extChangePct: qqqExtChangePct, extType: qqqExtType },
-    vix: { price: vixLevel, chg: Math.round(vixChgPct * 100) / 100 },
-    dxy: { price: dxyPrice, chg: Math.round(dxyChgPct * 100) / 100 },
-    tnx: { price: tnxLevel, chg: Math.round(tnxChgPct * 100) / 100 },
+  const sectors = sectorSyms.map((sym, i) => ({
+    sym,
+    name: sectorNames[sym],
+    price: sectorResults[i]?.price ?? 0,
+    chg: sectorResults[i]?.changePct ?? 0
+  })).sort((a, b) => b.chg - a.chg);
+
+  const breadth = estimateBreadth(spy?.changePct || 0, sectors.map(s => s.chg));
+  const regime = (spyPrice > spySma89 && spyPrice > spySma233 && spyRSI > 45) ? 'uptrend' : (spyPrice < spySma89 && spyPrice < spySma233) ? 'downtrend' : 'chop';
+  const marketStatus = getMarketStatus();
+
+  return {
+    spy: { price: spyPrice, chg: spy?.changePct ?? 0, dollar: spy?.change ?? 0 },
+    qqq: { price: qqqPrice, chg: qqq?.changePct ?? 0, dollar: qqq?.change ?? 0 },
+    vix: { price: vixLevel, chg: vix?.changePct ?? 0 },
+    dxy: { price: dxyPrice, chg: dxy?.changePct ?? 0 },
+    tnx: { price: tnxLevel, chg: tnx?.changePct ?? 0 },
     spyVs20: spyEma21 && spyPrice > spyEma21 ? 'above' : 'below',
     spyVs50: spySma89 && spyPrice > spySma89 ? 'above' : 'below',
     spyVs200: spySma233 && spyPrice > spySma233 ? 'above' : 'below',
-    spy20: spyEma21 ? Math.round(spyEma21 * 100) / 100 : null,
-    spy50: spySma89 ? Math.round(spySma89 * 100) / 100 : null,
-    spy200: spySma233 ? Math.round(spySma233 * 100) / 100 : null,
-    spyEma21AboveSma89: !!spyEma21AboveSma89,
-    spySma89AboveSma233: !!spySma89AboveSma233,
+    spyEma21AboveSma89: !!(spyEma21 && spySma89 && spyEma21 > spySma89),
+    spySma89AboveSma233: !!(spySma89 && spySma233 && spySma89 > spySma233),
     qqqVs50: qqqSma89 ? (qqqPrice > qqqSma89 ? 'above' : 'below') : 'unknown',
-    spyRSI, regime, vixLevel, vixSlope,
+    spyRSI,
+    regime,
+    vixLevel,
+    vixSlope,
     vixPercentile: estimateVixPercentile(vixLevel),
-    putCallRatio: null,
-    putCallMode: 'unavailable',
     breadthMode: breadth.mode,
-    breadthUniverse: breadth.universe || 'proxy',
-    breadthSampleSize: breadth.sampleSize || null,
-    ...breadth,
-    tenYrLevel: tnxLevel, tenYrTrend, dxyTrend,
+    pctAbove20: breadth.pctAbove20,
+    pctAbove50: breadth.pctAbove50,
+    pctAbove200: breadth.pctAbove200,
+    adRatio: breadth.adRatio,
+    nasdaqHL: breadth.nasdaqHL,
+    participation: breadth.participation,
+    tenYrLevel: tnxLevel,
+    tenYrTrend,
+    dxyTrend,
     fedStance: 'neutral',
     macroMode: 'partial',
-    fomcDays, fomc72hr: fomcDays <= 3,
-    marketOpen: marketStatus.open, marketStatus: marketStatus.label,
-    feedHealth, feedQuality, sectors, scoreHistory,
-    marketState: v7Quotes['SPY']?.marketState || 'REGULAR',
+    putCallMode: 'unavailable',
+    fomc72hr: false,
+    marketOpen: marketStatus.open,
+    marketStatus: marketStatus.label,
+    sectors,
     lastUpdated: new Date().toISOString(),
     dataSource: 'Yahoo Finance (live)'
   };
-
-  const scores = calcScoresServer(marketData);
-  marketData.serverScores = scores;
-  marketData.topReasons = scores.topReasons;
-  marketData.decision = scores.decision;
-
-  addToScoreHistory(scores.total, scores.decision);
-  await logJournalEntry({
-    score: scores.total,
-    decision: scores.decision,
-    spyEntry: Math.round(spyPrice * 100) / 100,
-    qqqEntry: Math.round(qqqPrice * 100) / 100,
-    vixEntry: vixLevel,
-    breadthMode: breadth.mode,
-    breadthSampleSize: breadth.sampleSize || null,
-    regime,
-    categoryScores: {
-      volatility: scores.vix,
-      momentum: scores.momentum,
-      trend: scores.trend,
-      breadth: scores.breadth,
-      macro: scores.macro
-    },
-    topReasons: scores.topReasons,
-    leadSectors: sectors.slice(0, 3).map(s => s.sym),
-    laggardSector: sectors[sectors.length - 1]?.sym || null
-  });
-
-  try {
-    const wlData = await buildWatchlistData(spyHistory, scores.decision);
-    watchlistCache = { data: wlData, ts: Date.now(), marketDecision: scores.decision };
-    marketData.watchlist = wlData;
-  } catch(e) {}
-
-  return marketData;
 }
 
+async function getMarketPayload() {
+  const now = Date.now();
+  if (cache.data && now - cache.ts < CACHE_TTL) return cache.data;
 
-const WATCHLIST = ['TSLA', 'NVDA', 'PYPL', 'MSTR', 'HD'];
-let watchlistCache = { data: null, ts: 0 };
-const WATCHLIST_CACHE_TTL = 60000; // 1 min cache
+  const marketData = await buildMarketData();
+  const feedQuality = getFeedQuality(feedHealth);
+  const systemStatus = buildSystemStatus({ marketData, feedQuality });
+  const confidence = buildConfidence({ marketData, feedQuality, systemStatus });
 
-
-
-async function fetchStockData(symbol, spyHistory, wlV7Quotes, marketDecision) {
-  try {
-    const [history, quote] = await Promise.all([
-      fetchYahooHistory(symbol, 400),
-      fetchSingleQuote(symbol, 'WL_' + symbol)
-    ]);
-    if (!quote || history.length < 20) return null;
-
-    const wlV7 = (wlV7Quotes && wlV7Quotes[symbol]) || {};
-    const price = wlV7.price ?? quote.price;
-    // Use history array for prev close — fixes Yahoo Monday boundary bug
-    const histPrevWl = history.length >= 2 ? history[history.length - 2] : 0;
-    const wlPrev = (histPrevWl > 0 && Math.abs(price - histPrevWl) / histPrevWl < 0.10)
-      ? histPrevWl
-      : (wlV7.prev ?? quote.prev ?? 0);
-    const wlChg = price - wlPrev;
-    const changePct = wlPrev > 0 ? ((price - wlPrev) / wlPrev) * 100 : (wlV7.changePct ?? quote.changePct ?? 0);
-    // Fibonacci-based MAs
-    const ema8 = calcEMA(history, 8);
-    const ema21 = calcEMA(history, 21);
-    const sma89 = calcSMA(history, 89);
-    const sma233 = calcSMA(history, 233) || null; // requires 233 bars — no ma200 fallback
-    // Keep legacy aliases for compatibility
-    const ma20 = ema21;
-    const ma50 = sma89;
-    const ma200 = sma233;
-    const rsi = calcRSI(history, 14);
-
-    // Relative strength vs SPY (20d performance comparison)
-    const stockPerf20 = history.length >= 20 ? ((history[history.length-1] - history[history.length-20]) / history[history.length-20]) * 100 : 0;
-    const spyPerf20 = spyHistory.length >= 20 ? ((spyHistory[spyHistory.length-1] - spyHistory[spyHistory.length-20]) / spyHistory[spyHistory.length-20]) * 100 : 0;
-    const relStrength = Math.round((stockPerf20 - spyPerf20) * 100) / 100;
-
-    // Volume trend (avg last 5 vs avg last 20) - approximate from price action
-    const recentVolatility = history.slice(-5).reduce((acc, v, i, arr) => {
-      if (i === 0) return acc;
-      return acc + Math.abs((v - arr[i-1]) / arr[i-1]);
-    }, 0) / 4 * 100;
-
-    // ATR-based volatility (14-day)
-    const atr = recentVolatility;
-
-    // Setup score (0-100)
-    let setupScore = 0;
-    // Trend structure — reward being above each MA
-    if (sma233 && price > sma233) setupScore += 25;
-    if (sma89 && price > sma89) setupScore += 20;
-    if (ema21 && price > ema21) setupScore += 15;
-    if (ema8 && price > ema8) setupScore += 5;
-    // RSI health
-    if (rsi > 40 && rsi < 70) setupScore += 20;
-    if (rsi > 50) setupScore += 5;
-    // Near-MA bonus — only valid when price is AT or ABOVE the MA (true pullback setup)
-    if (ema21) {
-      const dist21 = (price - ema21) / ema21;
-      if (dist21 >= 0 && dist21 < 0.03) setupScore += 10;
-      else if (dist21 < -0.02) setupScore -= 8;
-    }
-    if (sma89) {
-      const dist89 = (price - sma89) / sma89;
-      if (dist89 >= 0 && dist89 < 0.03) setupScore += 8;
-      else if (dist89 < -0.02) setupScore -= 10;
-    }
-    // Trend alignment penalties — punish bearish MA stacking
-    if (ema8 && ema21 && ema8 < ema21) setupScore -= 6;
-    if (ema21 && sma89 && ema21 < sma89) setupScore -= 8;
-    if (sma89 && sma233 && sma89 < sma233) setupScore -= 8;
-    if (sma233 && price < sma233) setupScore -= 15;
-    setupScore = Math.max(0, Math.min(100, setupScore));
-
-    // Momentum score (0-100)
-    let momentumScore = 0;
-    momentumScore += relStrength > 5 ? 35 : relStrength > 0 ? 20 : relStrength > -5 ? 5 : 0;
-    momentumScore += changePct > 2 ? 25 : changePct > 0.5 ? 15 : changePct > 0 ? 8 : 0;
-    const slope = calcSlope(history, 10);
-    momentumScore += slope > 2 ? 25 : slope > 0.5 ? 15 : slope > 0 ? 5 : 0;
-    momentumScore += rsi > 55 ? 15 : rsi > 45 ? 8 : 0;
-    momentumScore = Math.max(0, Math.min(100, momentumScore));
-
-    const combinedScore = Math.round(setupScore * 0.6 + momentumScore * 0.4);
-
-    // Verdict
-    let verdict = 'AVOID';
-    const canBeActionable = combinedScore >= 65 &&
-      relStrength >= 0 &&
-      (!sma89 || price >= sma89) &&
-      (!ema21 || price >= ema21);
-
-    if (canBeActionable) verdict = 'ACTIONABLE';
-    else if (combinedScore >= 45) verdict = 'WATCH';
-
-    // Market regime gate: single-name quality cannot override hostile tape.
-    if (marketDecision === 'NO' && verdict === 'ACTIONABLE') verdict = 'WATCH';
-    if (marketDecision === 'NO' && combinedScore < 55) verdict = 'AVOID';
-    if (marketDecision === 'CAUTION' && verdict === 'ACTIONABLE' && combinedScore < 75) verdict = 'WATCH';
-
-    // Key levels
-    const support = sma89 && price >= sma89 ? Math.round(sma89 * 100) / 100 : null;
-    const resistance = ema21 && price < ema21 ? Math.round(ema21 * 100) / 100 : null;
-
-    // Top reasons
-    const reasons = [];
-    if (ma200) {
-      if (price > ma200) reasons.push('Above SMA 233');
-      else reasons.push('Below SMA 233');
-    }
-    if (relStrength > 2) reasons.push('Outperforming SPY +'+relStrength.toFixed(1)+'%');
-    else if (relStrength < -2) reasons.push('Underperforming SPY '+relStrength.toFixed(1)+'%');
-    if (rsi > 70) reasons.push('RSI overbought ('+rsi+')');
-    else if (rsi < 30) reasons.push('RSI oversold ('+rsi+')');
-    else if (rsi > 50) reasons.push('RSI healthy ('+rsi+')');
-    if (ma20 && price >= ma20 && (price - ma20) / ma20 < 0.03) reasons.push('Near EMA 21 support');
-    if (ma50 && price >= ma50 && (price - ma50) / ma50 < 0.03) reasons.push('Near SMA 89 support');
-
-    return {
-      symbol,
-      price,
-      changePct: Math.round(changePct * 100) / 100,
-      change: Math.round(wlChg * 100) / 100,
-      ema8: ema8 ? Math.round(ema8 * 100) / 100 : null,
-      ema21: ema21 ? Math.round(ema21 * 100) / 100 : null,
-      sma89: sma89 ? Math.round(sma89 * 100) / 100 : null,
-      sma233: sma233 ? Math.round(sma233 * 100) / 100 : null,
-      ma20: ema21 ? Math.round(ema21 * 100) / 100 : null,
-      ma50: sma89 ? Math.round(sma89 * 100) / 100 : null,
-      ma200: sma233 ? Math.round(sma233 * 100) / 100 : null,
-      vs20: ema21 ? (price > ema21 ? 'above' : 'below') : 'unknown',
-      vs50: sma89 ? (price > sma89 ? 'above' : 'below') : 'unknown',
-      vs200: sma233 ? (price > sma233 ? 'above' : 'below') : 'unknown',
-      vsEma8: ema8 ? (price > ema8 ? 'above' : 'below') : 'unknown',
-      rsi,
-      relStrength,
-      atr: Math.round(atr * 10) / 10,
-      setupScore,
-      momentumScore,
-      combinedScore,
-      verdict,
-      support,
-      resistance,
-      reasons: reasons.slice(0, 3),
-      perf20d: Math.round(stockPerf20 * 100) / 100
+  let payload;
+  if (systemStatus.suppressDecision) {
+    payload = {
+      status: 'unavailable',
+      timestamp: new Date().toISOString(),
+      modelVersion: 'market-v1',
+      systemStatus,
+      confidenceScore: confidence.confidenceScore,
+      confidenceLabel: confidence.confidenceLabel,
+      confidenceReasons: confidence.confidenceReasons,
+      dataQuality: {
+        label: feedQuality.label,
+        staleFeeds: feedQuality.stale,
+        errors: feedQuality.errors,
+        proxyInputs: marketData.breadthMode === 'proxy' ? ['breadth'] : [],
+        missingInputs: ['putCall']
+      },
+      market: {
+        spy: marketData.spy,
+        qqq: marketData.qqq,
+        vix: marketData.vix,
+        dxy: marketData.dxy,
+        tnx: marketData.tnx
+      }
     };
-  } catch(e) {
-    console.error('Stock fetch error:', symbol, e.message);
-    return null;
+  } else {
+    const score = buildMarketScore(marketData);
+    payload = {
+      status: systemStatus.status,
+      timestamp: new Date().toISOString(),
+      modelVersion: score.modelVersion,
+      decision: score.decision,
+      score: score.weightedScore,
+      summary: score.summary,
+      guidance: score.guidance,
+      topReasons: score.topReasons,
+      blockers: score.blockers,
+      categoryScores: score.categoryScores,
+      vetoFlags: score.vetoFlags,
+      confidenceScore: confidence.confidenceScore,
+      confidenceLabel: confidence.confidenceLabel,
+      confidenceReasons: confidence.confidenceReasons,
+      systemStatus,
+      dataQuality: {
+        label: feedQuality.label,
+        staleFeeds: feedQuality.stale,
+        errors: feedQuality.errors,
+        proxyInputs: marketData.breadthMode === 'proxy' ? ['breadth'] : [],
+        missingInputs: ['putCall']
+      },
+      market: {
+        spy: marketData.spy,
+        qqq: marketData.qqq,
+        vix: marketData.vix,
+        dxy: marketData.dxy,
+        tnx: marketData.tnx
+      }
+    };
   }
-}
 
-async function buildWatchlistData(spyHistory, marketDecision) {
-  const wlV7Quotes = await fetchV7Quotes(WATCHLIST);
-  const results = await Promise.all(WATCHLIST.map(sym => fetchStockData(sym, spyHistory, wlV7Quotes, marketDecision)));
-  return results.filter(r => r !== null).sort((a, b) => b.combinedScore - a.combinedScore);
-}
-
-async function getWatchlistData(spyHistory, marketDecision) {
-  const now = Date.now();
-  if (watchlistCache.data && (now - watchlistCache.ts) < WATCHLIST_CACHE_TTL && watchlistCache.marketDecision === marketDecision) {
-    return { stocks: watchlistCache.data, cached: true };
-  }
-  const stocks = await buildWatchlistData(spyHistory, marketDecision);
-  watchlistCache = { data: stocks, ts: now, marketDecision };
-  return { stocks, cached: false };
-}
-
-async function getMarketData() {
-  const now = Date.now();
-  if (cache.data && (now - cache.ts) < CACHE_TTL) {
-    return { ...cache.data, cached: true };
-  }
-  const data = await buildMarketData();
-  cache = { data, ts: now };
-  return { ...data, cached: false };
+  cache = { data: payload, ts: now };
+  return payload;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -1128,87 +290,25 @@ const server = http.createServer(async (req, res) => {
 
   if (parsed.pathname === '/api/market') {
     try {
-      const data = await getMarketData();
-      res.setHeader('Cache-Control', 'no-store, max-age=0');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
-      res.writeHead(200, { 'Content-Type': 'application/json' });
+      const data = await getMarketPayload();
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, max-age=0' });
       res.end(JSON.stringify(data));
     } catch (err) {
-      console.error('Error:', err.message);
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
-    }
-    return;
-  }
-
-  if (parsed.pathname === '/api/journal') {
-    await backfillJournalOutcomes();
-    res.setHeader('Cache-Control', 'no-store, max-age=0');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ journal, count: journal.length }));
-    return;
-  }
-
-  if (parsed.pathname === '/api/backtest') {
-    await backfillJournalOutcomes();
-    res.setHeader('Cache-Control', 'no-store, max-age=0');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(buildBacktestSummary()));
-    return;
-  }
-
-  if (parsed.pathname === '/api/watchlist') {
-    try {
-      // Use cached spy history if available
-      const spyHist = await fetchYahooHistory('SPY', 220);
-      const market = await getMarketData();
-      const data = await getWatchlistData(spyHist, market.decision || market.serverScores?.decision || 'NO');
-      res.setHeader('Cache-Control', 'no-store, max-age=0');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(data));
-    } catch(err) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
-    }
-    return;
-  }
-
-  if (parsed.pathname === '/api/crypto') {
-    try {
-      const data = await fetchCryptoData();
-      res.setHeader('Cache-Control', 'no-store, max-age=0');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
-      if (!data) {
-        res.writeHead(503, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'No crypto data available' }));
-        return;
-      }
-      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-      res.end(JSON.stringify(data));
-    } catch(e) {
-      res.writeHead(500); res.end(JSON.stringify({ error: e.message }));
+      res.end(JSON.stringify({ status: 'unavailable', error: err.message }));
     }
     return;
   }
 
   if (parsed.pathname === '/api/health') {
-    res.setHeader('Cache-Control', 'no-store, max-age=0');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+    const feedQuality = getFeedQuality(feedHealth);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', uptime: process.uptime(), feedHealth }));
+    res.end(JSON.stringify({ status: 'ok', uptime: process.uptime(), feedHealth, feedQuality }));
     return;
   }
 
-  res.writeHead(404); res.end('Not found');
+  res.writeHead(404);
+  res.end('Not found');
 });
 
 server.listen(PORT, () => console.log(`SIBT API running on port ${PORT}`));
