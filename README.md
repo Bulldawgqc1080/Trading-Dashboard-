@@ -1,4 +1,4 @@
-[README.md](https://github.com/user-attachments/files/26384548/README.md)
+[README.md](https://github.com/user-attachments/files/26385283/README.md)
 # SIBT — Should I Be Trading?
 
 Reliability-first market environment dashboard for swing traders.
@@ -10,6 +10,7 @@ Reliability-first market environment dashboard for swing traders.
 - Confidence scoring added
 - Backend owns decision truth; frontend renders only
 - Watchlist ported into new structure
+- Journal + backtest ported into new structure
 
 ## Project structure
 ```text
@@ -23,13 +24,9 @@ lib/health.js
 lib/scoring/market.js
 lib/scoring/confidence.js
 lib/scoring/watchlist.js
+lib/journal/store.js
+lib/journal/backtest.js
 ```
-
-## Reliability rules
-- Never show a trading verdict when critical market data is unavailable.
-- Mark degraded/partial states clearly.
-- Confidence is separate from score.
-- Proxy inputs reduce confidence.
 
 ## Run locally
 ```bash
