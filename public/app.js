@@ -12,7 +12,7 @@ function renderUnavailable(data) {
   document.getElementById('decision').className = 'decision UNAVAILABLE';
   document.getElementById('score').textContent = '--';
   document.getElementById('confidence').textContent = '--';
-  document.getElementById('summary').textContent = 'The system does not currently have enough trustworthy data to issue a market verdict.';
+  document.getElementById('summary').textContent = 'The system does not currently have enough trustworthy data to issue a market permission read.';
   document.getElementById('guidance').textContent = 'Wait for live market data and healthy critical feeds before using SIBT for decisions.';
   document.getElementById('reasons').innerHTML = '';
   document.getElementById('blockers').innerHTML = pill('critical data unavailable', 'bad');
@@ -21,27 +21,33 @@ function renderUnavailable(data) {
   document.getElementById('snapshot').innerHTML = '';
 }
 
+function decisionDisplay(data) {
+  if (data.permissionLabel === 'FAVORABLE') return 'FAVORABLE';
+  if (data.permissionLabel === 'SELECTIVE') return 'SELECTIVE';
+  return 'LOW PERMISSION';
+}
+
 function renderMarket(data) {
-  const decision = data.decision || 'NO';
-  const decisionText = decision === 'YES' ? 'FAVORABLE' : decision === 'CAUTION' ? 'SELECTIVE' : 'NOT FAVORABLE';
   const bannerClass = data.status === 'ok' ? 'ok' : 'warn';
-  const bannerText = data.status === 'ok' ? 'System healthy — verdict allowed.' : `System degraded — use reduced confidence. ${data.systemStatus?.reason || ''}`;
+  const bannerText = data.status === 'ok'
+    ? 'System healthy — permission read allowed.'
+    : `System degraded — use reduced confidence. ${data.systemStatus?.reason || ''}`;
   document.getElementById('statusBanner').innerHTML = `<div class="banner ${bannerClass}">${bannerText}</div>`;
-  document.getElementById('decision').textContent = decisionText;
-  document.getElementById('decision').className = `decision ${decision}`;
+  document.getElementById('decision').textContent = decisionDisplay(data);
+  document.getElementById('decision').className = `decision ${data.decision || 'NO'}`;
   document.getElementById('score').textContent = data.score;
   document.getElementById('score').style.color = scoreColor(data.score);
   document.getElementById('confidence').textContent = `${data.confidenceLabel} (${data.confidenceScore})`;
   document.getElementById('confidence').style.color = scoreColor(data.confidenceScore);
   document.getElementById('timestamp').textContent = data.timestamp ? `Updated ${new Date(data.timestamp).toLocaleTimeString()}` : '';
   document.getElementById('summary').textContent = data.summary || '';
-  document.getElementById('guidance').textContent = data.guidance || '';
+  document.getElementById('guidance').textContent = `${data.guidance || ''} ${data.interpretation || ''}`.trim();
   document.getElementById('reasons').innerHTML = (data.topReasons || []).map(r => pill(r, 'good')).join('') || '<span class="muted">—</span>';
   document.getElementById('blockers').innerHTML = (data.blockers || []).map(r => pill(r, 'bad')).join('') || '<span class="muted">—</span>';
   const cats = data.categoryScores || {};
   document.getElementById('categoryGrid').innerHTML = Object.entries(cats).map(([k,v]) => `<div class="card score-row"><div class="metric-label">${k.toUpperCase()}</div><div style="font-size:24px;font-weight:700;color:${scoreColor(v)}">${v}</div><div class="track"><div class="fill" style="width:${v}%;background:${scoreColor(v)}"></div></div></div>`).join('');
   const dq = data.dataQuality || {};
-  document.getElementById('quality').innerHTML = `<div class="kv"><span>Quality</span><span>${dq.label || '—'}</span></div><div class="kv"><span>Proxy inputs</span><span class="subtle">${(dq.proxyInputs || []).join(', ') || 'none'}</span></div><div class="kv"><span>Missing inputs</span><span class="subtle">${(dq.missingInputs || []).join(', ') || 'none'}</span></div><div class="kv"><span>Stale feeds</span><span class="subtle">${(dq.staleFeeds || []).join(', ') || 'none'}</span></div><div class="kv"><span>Feed errors</span><span class="subtle">${(dq.errors || []).join(', ') || 'none'}</span></div>`;
+  document.getElementById('quality').innerHTML = `<div class="kv"><span>Quality</span><span>${dq.label || '—'}</span></div><div class="kv"><span>Proxy inputs</span><span class="subtle">${(dq.proxyInputs || []).join(', ') || 'none'}</span></div><div class="kv"><span>Missing inputs</span><span class="subtle">${(dq.missingInputs || []).join(', ') || 'none'}</span></div><div class="kv"><span>Stale feeds</span><span class="subtle">${(dq.staleFeeds || []).join(', ') || 'none'}</span></div><div class="kv"><span>Feed errors</span><span class="subtle">${(dq.errors || []).join(', ') || 'none'}</span></div><div style="margin-top:8px;font-size:10px;color:var(--text3);">This is a market permission tool, not a directional prediction engine.</div>`;
   const m = data.market || {};
   document.getElementById('snapshot').innerHTML = `<div class="kv"><span>SPY</span><span>${m.spy?.price ?? '—'} (${m.spy?.chg ?? '—'}%)</span></div><div class="kv"><span>QQQ</span><span>${m.qqq?.price ?? '—'} (${m.qqq?.chg ?? '—'}%)</span></div><div class="kv"><span>VIX</span><span>${m.vix?.price ?? '—'}</span></div><div class="kv"><span>DXY</span><span>${m.dxy?.price ?? '—'}</span></div><div class="kv"><span>10Y</span><span>${m.tnx?.price ?? '—'}</span></div>`;
 }
@@ -60,7 +66,7 @@ function renderBacktest(data) {
   if (!data || !data.buckets) { status.textContent = 'No backtest data available.'; panel.innerHTML = ''; return; }
   status.textContent = data.updatedAt ? `Updated ${new Date(data.updatedAt).toLocaleTimeString()}` : 'Ready';
   const buckets = ['YES', 'CAUTION', 'NO'];
-  panel.innerHTML = `<div class="bt-grid">${buckets.map(key => { const b = data.buckets[key] || {}; const col = key === 'YES' ? 'var(--green)' : key === 'CAUTION' ? 'var(--amber)' : 'var(--red)'; return `<div class="bt-card"><div class="kv"><span style="color:${col};font-weight:700">${key}</span><span class="muted">${b.count || 0} entries</span></div><div class="kv"><span>Avg 1D</span><span>${b.avg1d != null ? b.avg1d + '%' : '—'}</span></div><div class="kv"><span>Avg 5D</span><span>${b.avg5d != null ? b.avg5d + '%' : '—'}</span></div><div class="kv"><span>Avg 10D</span><span>${b.avg10d != null ? b.avg10d + '%' : '—'}</span></div><div class="kv"><span>Win 1D</span><span>${b.winRate1d != null ? b.winRate1d + '%' : '—'}</span></div><div class="kv"><span>Win 5D</span><span>${b.winRate5d != null ? b.winRate5d + '%' : '—'}</span></div><div class="kv"><span>Win 10D</span><span>${b.winRate10d != null ? b.winRate10d + '%' : '—'}</span></div></div>`; }).join('')}</div>`;
+  panel.innerHTML = `<div class="bt-grid">${buckets.map(key => { const b = data.buckets[key] || {}; const col = key === 'YES' ? 'var(--green)' : key === 'CAUTION' ? 'var(--amber)' : 'var(--red)'; return `<div class="bt-card"><div class="kv"><span style="color:${col};font-weight:700">${key}</span><span class="muted">${b.count || 0} entries</span></div><div class="kv"><span>Avg 1D</span><span>${b.avg1d != null ? b.avg1d + '%' : '—'}</span></div><div class="kv"><span>Avg 5D</span><span>${b.avg5d != null ? b.avg5d + '%' : '—'}</span></div><div class="kv"><span>Avg 10D</span><span>${b.avg10d != null ? b.avg10d + '%' : '—'}</span></div><div class="kv"><span>Win 1D</span><span>${b.winRate1d != null ? b.winRate1d + '%' : '—'}</span></div><div class="kv"><span>Win 5D</span><span>${b.winRate5d != null ? b.winRate5d + '%' : '—'}</span></div><div class="kv"><span>Win 10D</span><span>${b.winRate10d != null ? b.winRate10d + '%' : '—'}</span></div></div>`; }).join('')}</div><div style="margin-top:8px;font-size:10px;color:var(--text3);">Interpret this as a permission study, not a directional market forecast. A NO bucket can still include positive forward returns if broad conditions were poor for clean entries but index drift stayed positive.</div>`;
 }
 
 function renderJournal(data) {
@@ -68,7 +74,7 @@ function renderJournal(data) {
   const panel = document.getElementById('journalPanel');
   if (!data || !data.journal || !data.journal.length) { status.textContent = 'No journal data available.'; panel.innerHTML = ''; return; }
   status.textContent = `${data.count} total entries`;
-  panel.innerHTML = `<div class="journal-list">${data.journal.slice(-8).reverse().map(j => { const col = j.decision === 'YES' ? 'var(--green)' : j.decision === 'CAUTION' ? 'var(--amber)' : 'var(--red)'; return `<div class="journal-item"><div class="kv"><span style="color:${col};font-weight:700">${j.date} · ${j.decision || '—'}</span><span>score ${j.score ?? '—'}</span></div><div class="kv"><span>Confidence</span><span>${j.confidenceScore ?? '—'}</span></div><div class="kv"><span>SPY</span><span>${j.spyEntry ?? '—'}</span></div><div class="kv"><span>1D / 5D / 10D</span><span>${j.outcome1d ?? '—'} / ${j.outcome5d ?? '—'} / ${j.outcome10d ?? '—'}</span></div><div>${(j.topReasons || []).map(r => pill(r, 'good')).join('')}</div></div>`; }).join('')}</div>`;
+  panel.innerHTML = `<div class="journal-list">${data.journal.slice(-8).reverse().map(j => { const col = j.decision === 'YES' ? 'var(--green)' : j.decision === 'CAUTION' ? 'var(--amber)' : 'var(--red)'; return `<div class="journal-item"><div class="kv"><span style="color:${col};font-weight:700">${j.date} · ${j.decision || '—'}</span><span>score ${j.score ?? '—'}</span></div><div class="kv"><span>Confidence</span><span>${j.confidenceScore ?? '—'}</span></div><div class="kv"><span>SPY</span><span>${j.spyEntry ?? '—'}</span></div><div class="kv"><span>1D / 5D / 10D</span><span>${j.outcome1d ?? '—'} / ${j.outcome5d ?? '—'} / ${j.outcome10d ?? '—'}</span></div><div>${(j.topReasons || []).map(r => pill(r, 'good')).join('')}</div></div>`; }).join('')}</div><div style="margin-top:8px;font-size:10px;color:var(--text3);">Older journal rows may have incomplete fields because they were logged before the current schema.</div>`;
 }
 
 async function loadJson(url) {
@@ -79,10 +85,7 @@ async function loadJson(url) {
 }
 
 async function loadAll() {
-  try {
-    const market = await loadJson(API_URL);
-    if (market.status === 'unavailable') renderUnavailable(market); else renderMarket(market);
-  } catch (err) { renderUnavailable({ systemStatus: { reason: err.message } }); }
+  try { const market = await loadJson(API_URL); if (market.status === 'unavailable') renderUnavailable(market); else renderMarket(market); } catch (err) { renderUnavailable({ systemStatus: { reason: err.message } }); }
   try { renderWatchlist(await loadJson(WATCHLIST_URL)); } catch (err) { document.getElementById('watchlistStatus').textContent = `Watchlist failed: ${err.message}`; }
   try { renderBacktest(await loadJson(BACKTEST_URL)); } catch (err) { document.getElementById('backtestStatus').textContent = `Backtest failed: ${err.message}`; }
   try { renderJournal(await loadJson(JOURNAL_URL)); } catch (err) { document.getElementById('journalStatus').textContent = `Journal failed: ${err.message}`; }
