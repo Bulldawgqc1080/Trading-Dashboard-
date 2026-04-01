@@ -1,3 +1,4 @@
+[README.md](https://github.com/user-attachments/files/26385920/README.md)
 # SIBT — Should I Be Trading?
 
 Reliability-first market **permission** dashboard for swing traders.
