@@ -1,0 +1,6 @@
+{
+  "breadthMode": "proxy",
+  "macroMode": "partial",
+  "putCallMode": "unavailable",
+  "feedQuality": { "quality": "degraded", "stale": ["DXY"], "errors": [] }
+}

@@ -1,0 +1,6 @@
+{
+  "SPY": { "status": "ok", "ts": 0 },
+  "QQQ": { "status": "ok", "ts": 0 },
+  "VIX": { "status": "ok", "ts": 0 },
+  "DXY": { "status": "ok", "ts": 0 }
+}
