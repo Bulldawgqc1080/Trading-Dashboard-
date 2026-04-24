@@ -21,9 +21,12 @@
     <section class="hero">
       <article class="card decision-card">
         <div class="metric-label">MARKET DECISION</div>
-        <div id="decision" class="decision">LOADING</div>
+        <div class="decision-shell">
+          <div id="decision" class="decision">LOADING</div>
+          <div id="decisionBadge" class="decision-badge">Waiting for data</div>
+        </div>
         <div class="hero-metrics">
-          <div class="hero-metric">
+          <div class="hero-metric score-panel">
             <div class="subtle">Score</div>
             <div id="score" class="big-score">--</div>
           </div>
@@ -31,6 +34,10 @@
             <div class="subtle">Confidence</div>
             <div id="confidence" class="confidence-readout">--</div>
           </div>
+        </div>
+        <div class="today-call">
+          <div class="metric-label">TODAY'S CALL</div>
+          <div id="todayCall" class="today-call-text">Waiting for live market read...</div>
         </div>
         <div id="timestamp" class="muted timestamp"></div>
       </article>

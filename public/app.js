@@ -6,13 +6,28 @@ const JOURNAL_URL = '/api/journal';
 function scoreColor(s){return s>=70?'var(--green)':s>=45?'var(--amber)':'var(--red)'}
 function scoreTone(s){return s>=70?'good':s>=45?'warn':'bad'}
 function pill(text, cls){return `<span class="pill ${cls}">${text}</span>`}
+function decisionBadgeText(data){
+  if (data.status === 'unavailable') return 'No trustworthy read';
+  if (data.permissionLabel === 'FAVORABLE') return 'Conditions support active trading';
+  if (data.permissionLabel === 'SELECTIVE') return 'Be selective and stay disciplined';
+  return 'Patience has the edge right now';
+}
+function todayCallText(data){
+  if (data.status === 'unavailable') return 'Stand down until live market data is healthy again.';
+  if (data.permissionLabel === 'FAVORABLE') return 'You can be involved, but still favor clean setups and follow-through.';
+  if (data.permissionLabel === 'SELECTIVE') return 'Trade only your best names and avoid forcing mediocre setups.';
+  return 'Do less, wait for cleaner conditions, and protect decision quality.';
+}
 
 function renderUnavailable(data) {
   document.getElementById('statusBanner').innerHTML = `<div class="banner err">Live market data unavailable — do not use this tool until data integrity is restored. ${data?.systemStatus?.reason || ''}</div>`;
   document.getElementById('decision').textContent = 'UNAVAILABLE';
   document.getElementById('decision').className = 'decision UNAVAILABLE';
+  document.getElementById('decisionBadge').textContent = decisionBadgeText({ status: 'unavailable' });
+  document.getElementById('decisionBadge').className = 'decision-badge bad';
   document.getElementById('score').textContent = '--';
   document.getElementById('confidence').textContent = '--';
+  document.getElementById('todayCall').textContent = todayCallText({ status: 'unavailable' });
   document.getElementById('summary').textContent = 'The system does not currently have enough trustworthy data to issue a market permission read.';
   document.getElementById('guidance').textContent = 'Wait for live market data and healthy critical feeds before using SIBT for decisions.';
   document.getElementById('reasons').innerHTML = '';
@@ -36,10 +51,13 @@ function renderMarket(data) {
   document.getElementById('statusBanner').innerHTML = `<div class="banner ${bannerClass}">${bannerText}</div>`;
   document.getElementById('decision').textContent = decisionDisplay(data);
   document.getElementById('decision').className = `decision ${data.decision || 'NO'}`;
+  document.getElementById('decisionBadge').textContent = decisionBadgeText(data);
+  document.getElementById('decisionBadge').className = `decision-badge ${scoreTone(data.score)}`;
   document.getElementById('score').textContent = data.score;
   document.getElementById('score').style.color = scoreColor(data.score);
   document.getElementById('confidence').textContent = `${data.confidenceLabel} (${data.confidenceScore})`;
   document.getElementById('confidence').style.color = scoreColor(data.confidenceScore);
+  document.getElementById('todayCall').textContent = todayCallText(data);
   document.getElementById('timestamp').textContent = data.timestamp ? `Updated ${new Date(data.timestamp).toLocaleTimeString()}` : '';
   document.getElementById('summary').textContent = data.summary || '';
   document.getElementById('guidance').textContent = `${data.guidance || ''} ${data.interpretation || ''}`.trim();

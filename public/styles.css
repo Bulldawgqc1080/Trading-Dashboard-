@@ -83,12 +83,17 @@ body{display:flex;flex-direction:column}
   box-shadow:var(--shadow);
 }
 
-.decision-card{display:flex;flex-direction:column;justify-content:center;min-height:260px;position:sticky;top:16px}
+.decision-card{display:flex;flex-direction:column;justify-content:center;min-height:260px;position:sticky;top:16px;overflow:hidden}
 .metric-label{font-size:10px;color:var(--text3);letter-spacing:2.1px;margin-bottom:8px}
-.decision{font-size:34px;font-weight:700;letter-spacing:1.5px;line-height:1.05;margin:10px 0 18px}
+.decision-shell{display:flex;flex-direction:column;gap:10px;margin:10px 0 18px}
+.decision{font-size:34px;font-weight:700;letter-spacing:1.5px;line-height:1.05;margin:0}
 .decision.YES,.decision.FAVORABLE{color:var(--green)}
 .decision.CAUTION,.decision.SELECTIVE{color:var(--amber)}
 .decision.NO,.decision.UNAVAILABLE,.decision.LOW{color:var(--red)}
+.decision-badge{display:inline-flex;align-self:flex-start;padding:6px 10px;border-radius:999px;font-size:11px;line-height:1.3;border:1px solid rgba(89,208,255,.12);background:rgba(89,208,255,.08);color:var(--text2)}
+.decision-badge.good{color:var(--green);border-color:rgba(0,230,118,.30);background:rgba(0,230,118,.10)}
+.decision-badge.warn{color:var(--amber);border-color:rgba(255,179,71,.30);background:rgba(255,179,71,.10)}
+.decision-badge.bad{color:var(--red);border-color:rgba(255,91,91,.30);background:rgba(255,91,91,.10)}
 
 .hero-metrics{
   display:grid;
@@ -102,8 +107,12 @@ body{display:flex;flex-direction:column}
   border:1px solid rgba(89,208,255,.08);
   border-radius:14px;
 }
+.score-panel{position:relative}
+.score-panel::after{content:'';position:absolute;right:-30px;bottom:-30px;width:110px;height:110px;border-radius:50%;background:radial-gradient(circle,rgba(89,208,255,.16) 0%,rgba(89,208,255,0) 68%);pointer-events:none}
 .big-score{font-size:54px;font-weight:700;line-height:1;margin-top:4px}
 .confidence-readout{font-size:24px;font-weight:700;line-height:1.4;margin-top:4px}
+.today-call{margin-top:14px;padding:14px 16px;border-radius:16px;background:linear-gradient(180deg,rgba(8,17,26,.95) 0%,rgba(12,24,36,.92) 100%);border:1px solid rgba(89,208,255,.08)}
+.today-call-text{font-size:14px;line-height:1.7;color:var(--text)}
 .timestamp{margin-top:16px;font-size:11px}
 
 .subtle{color:var(--text2)}
