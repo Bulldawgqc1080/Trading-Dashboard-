@@ -3,7 +3,7 @@ const { buildConfidence } = require('../lib/scoring/confidence');
 
 function run() {
   const low = buildConfidence({
-    marketData: { breadthMode: 'proxy', macroMode: 'partial', putCallMode: 'unavailable' },
+    marketData: { breadthMode: 'proxy', macroMode: 'partial', putCallMode: 'unavailable', marketOpen: false, fedStance: 'neutral' },
     feedQuality: { stale: ['DXY'], errors: [] },
     systemStatus: { status: 'degraded' }
   });

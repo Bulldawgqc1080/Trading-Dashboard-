@@ -220,6 +220,7 @@ async function getMarketPayload() {
       interpretation: score.interpretation,
       topReasons: score.topReasons,
       blockers: score.blockers,
+      validationWarnings: score.validationWarnings,
       categoryScores: score.categoryScores,
       vetoFlags: score.vetoFlags,
       confidenceScore: confidence.confidenceScore,
@@ -233,15 +234,19 @@ async function getMarketPayload() {
     await logJournalEntry({
       modelVersion: score.modelVersion,
       decision: score.decision,
+      permissionLabel: score.permissionLabel,
       score: score.weightedScore,
       confidenceScore: confidence.confidenceScore,
+      confidenceLabel: confidence.confidenceLabel,
       status: systemStatus.status,
+      marketStatus: marketData.marketStatus,
       spyEntry: marketData.spy.price,
       qqqEntry: marketData.qqq.price,
       vixEntry: marketData.vix.price,
       breadthMode: marketData.breadthMode,
       topReasons: score.topReasons,
       blockers: score.blockers,
+      validationWarnings: score.validationWarnings,
       dataQuality: { label: feedQuality.label, staleFeeds: feedQuality.stale, errors: feedQuality.errors },
       inputsSnapshot: { spy: marketData.spy.price, qqq: marketData.qqq.price, vix: marketData.vix.price, pctAbove50: marketData.pctAbove50, adRatio: marketData.adRatio, topSector: marketData.sectors[0]?.sym || null }
     });

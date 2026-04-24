@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node api/server.js",
     "dev": "node api/server.js",
-    "test": "node test/market-score.test.js && node test/health.test.js && node test/confidence.test.js"
+    "test": "node test/market-score.test.js && node test/health.test.js && node test/confidence.test.js && node test/backtest.test.js"
   },
   "engines": {
     "node": ">=18.0.0"
