@@ -8,35 +8,120 @@
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <header class="topbar"><div class="logo">SIBT</div></header>
-  <main>
+  <header class="topbar">
+    <div class="brand-lockup">
+      <div class="logo">SIBT</div>
+      <div class="brand-subtitle">Should I Be Trading?</div>
+    </div>
+  </header>
+
+  <main class="dashboard-shell">
     <div id="statusBanner"></div>
+
     <section class="hero">
-      <div class="card">
+      <article class="card decision-card">
         <div class="metric-label">MARKET DECISION</div>
         <div id="decision" class="decision">LOADING</div>
-        <div class="subtle">Score</div><div id="score" class="big-score">--</div>
-        <div class="subtle" style="margin-top:10px;">Confidence</div><div id="confidence" style="font-size:22px;font-weight:700;">--</div>
-        <div id="timestamp" class="muted" style="margin-top:10px;"></div>
+        <div class="hero-metrics">
+          <div class="hero-metric">
+            <div class="subtle">Score</div>
+            <div id="score" class="big-score">--</div>
+          </div>
+          <div class="hero-metric hero-confidence">
+            <div class="subtle">Confidence</div>
+            <div id="confidence" class="confidence-readout">--</div>
+          </div>
+        </div>
+        <div id="timestamp" class="muted timestamp"></div>
+      </article>
+
+      <article class="card current-read-card">
+        <div class="card-header">
+          <div>
+            <div class="metric-label">CURRENT READ</div>
+            <p class="card-kicker">Plain-English view of today’s environment.</p>
+          </div>
+        </div>
+        <div id="summary" class="summary-text"></div>
+
+        <div class="guidance-block">
+          <div class="metric-label">ACTION GUIDANCE</div>
+          <div id="guidance" class="guidance-text"></div>
+        </div>
+
+        <div class="grid-2 reasons-grid">
+          <div class="subcard">
+            <div class="metric-label">TOP REASONS</div>
+            <div id="reasons"></div>
+          </div>
+          <div class="subcard">
+            <div class="metric-label">BLOCKERS</div>
+            <div id="blockers"></div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section>
+      <div class="section-heading">
+        <div>
+          <div class="metric-label">SCORING BREAKDOWN</div>
+          <p class="section-copy">Where the permission score is coming from right now.</p>
+        </div>
+      </div>
+      <div class="grid-5" id="categoryGrid"></div>
+    </section>
+
+    <section class="grid-2 info-panels">
+      <div class="card">
+        <div class="metric-label">DATA QUALITY</div>
+        <div id="quality"></div>
       </div>
       <div class="card">
-        <div class="metric-label">CURRENT READ</div><div id="summary" style="font-size:13px;line-height:1.7"></div>
-        <div class="metric-label" style="margin-top:14px;">ACTION GUIDANCE</div><div id="guidance" class="subtle" style="line-height:1.7"></div>
-        <div class="grid-2" style="margin-top:14px;"><div><div class="metric-label">TOP REASONS</div><div id="reasons"></div></div><div><div class="metric-label">BLOCKERS</div><div id="blockers"></div></div></div>
+        <div class="metric-label">MARKET SNAPSHOT</div>
+        <div id="snapshot"></div>
       </div>
     </section>
-    <section class="grid-5" id="categoryGrid"></section>
-    <section class="grid-2">
-      <div class="card"><div class="metric-label">DATA QUALITY</div><div id="quality"></div></div>
-      <div class="card"><div class="metric-label">MARKET SNAPSHOT</div><div id="snapshot"></div></div>
+
+    <section class="card section-card">
+      <div class="section-heading compact">
+        <div>
+          <div class="metric-label">WATCHLIST</div>
+          <p class="section-copy">Actionable names, setups, and what still needs improvement.</p>
+        </div>
+      </div>
+      <div id="watchlistStatus" class="muted section-status">Loading watchlist...</div>
+      <div id="watchlistGrid" class="watchlist-grid"></div>
     </section>
-    <section class="card" style="margin-top:10px;"><div class="metric-label">WATCHLIST</div><div id="watchlistStatus" class="muted" style="margin-bottom:10px;">Loading watchlist...</div><div id="watchlistGrid" class="watchlist-grid"></div></section>
-    <section class="grid-2" style="margin-top:10px;">
-      <div class="card"><div class="metric-label">BACKTEST SUMMARY</div><div id="backtestStatus" class="muted" style="margin-bottom:10px;">Loading backtest...</div><div id="backtestPanel"></div></div>
-      <div class="card"><div class="metric-label">RECENT JOURNAL ENTRIES</div><div id="journalStatus" class="muted" style="margin-bottom:10px;">Loading journal...</div><div id="journalPanel"></div></div>
+
+    <section class="grid-2 bottom-panels">
+      <div class="card section-card">
+        <div class="section-heading compact">
+          <div>
+            <div class="metric-label">BACKTEST SUMMARY</div>
+            <p class="section-copy">How similar environments have behaved afterward.</p>
+          </div>
+        </div>
+        <div id="backtestStatus" class="muted section-status">Loading backtest...</div>
+        <div id="backtestPanel"></div>
+      </div>
+      <div class="card section-card">
+        <div class="section-heading compact">
+          <div>
+            <div class="metric-label">RECENT JOURNAL ENTRIES</div>
+            <p class="section-copy">Latest logged reads and outcomes.</p>
+          </div>
+        </div>
+        <div id="journalStatus" class="muted section-status">Loading journal...</div>
+        <div id="journalPanel"></div>
+      </div>
     </section>
   </main>
-  <footer class="footer"><span>SIBT — reliability-first build</span><span id="footerTime"></span></footer>
+
+  <footer class="footer">
+    <span>SIBT — reliability-first build</span>
+    <span id="footerTime"></span>
+  </footer>
   <script src="/app.js"></script>
 </body>
 </html>
