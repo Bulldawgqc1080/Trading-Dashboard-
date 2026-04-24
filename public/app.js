@@ -6,6 +6,7 @@ const JOURNAL_URL = '/api/journal';
 function scoreColor(s){return s>=70?'var(--green)':s>=45?'var(--amber)':'var(--red)'}
 function scoreTone(s){return s>=70?'good':s>=45?'warn':'bad'}
 function pill(text, cls){return `<span class="pill ${cls}">${text}</span>`}
+function trustTone(score){return score >= 80 ? 'good' : score >= 55 ? 'warn' : 'bad'}
 function decisionBadgeText(data){
   if (data.status === 'unavailable') return 'No trustworthy read';
   if (data.permissionLabel === 'FAVORABLE') return 'Conditions support active trading';
@@ -34,6 +35,7 @@ function renderUnavailable(data) {
   document.getElementById('blockers').innerHTML = pill('critical data unavailable', 'bad');
   document.getElementById('categoryGrid').innerHTML = '';
   document.getElementById('quality').innerHTML = `<div class="kv"><span>Status</span><span class="subtle">UNAVAILABLE</span></div>`;
+  document.getElementById('modelTrust').innerHTML = `<div class="kv"><span>Trust level</span><span class="subtle">LOW</span></div><div class="trust-note">The model is intentionally suppressed because critical feeds are unavailable.</div>`;
   document.getElementById('snapshot').innerHTML = '';
 }
 
@@ -67,6 +69,8 @@ function renderMarket(data) {
   document.getElementById('categoryGrid').innerHTML = Object.entries(cats).map(([k,v]) => `<div class="card score-row score-row-${scoreTone(v)}"><div class="metric-label">${k.toUpperCase()}</div><div class="score-number" style="color:${scoreColor(v)}">${v}</div><div class="track"><div class="fill" style="width:${v}%;background:${scoreColor(v)}"></div></div></div>`).join('');
   const dq = data.dataQuality || {};
   document.getElementById('quality').innerHTML = `<div class="kv"><span>Quality</span><span>${dq.label || '—'}</span></div><div class="kv"><span>Proxy inputs</span><span class="subtle">${(dq.proxyInputs || []).join(', ') || 'none'}</span></div><div class="kv"><span>Missing inputs</span><span class="subtle">${(dq.missingInputs || []).join(', ') || 'none'}</span></div><div class="kv"><span>Stale feeds</span><span class="subtle">${(dq.staleFeeds || []).join(', ') || 'none'}</span></div><div class="kv"><span>Feed errors</span><span class="subtle">${(dq.errors || []).join(', ') || 'none'}</span></div><div style="margin-top:8px;font-size:10px;color:var(--text3);">This is a market permission tool, not a directional prediction engine.</div>`;
+  const warnings = data.validationWarnings || [];
+  document.getElementById('modelTrust').innerHTML = `<div class="kv"><span>Confidence</span><span class="trust-label ${trustTone(data.confidenceScore)}">${data.confidenceLabel} (${data.confidenceScore})</span></div><div class="kv"><span>Model version</span><span class="subtle">${data.modelVersion || '—'}</span></div><div class="kv"><span>Warnings</span><span class="subtle">${warnings.length}</span></div><div class="trust-list">${warnings.length ? warnings.map(w => pill(w, 'warn')).join('') : pill('no active trust warnings', 'good')}</div><div class="trust-note">Trust the read more when data is direct, current, and validated by enough samples.</div>`;
   const m = data.market || {};
   document.getElementById('snapshot').innerHTML = `<div class="kv"><span>SPY</span><span>${m.spy?.price ?? '—'} (${m.spy?.chg ?? '—'}%)</span></div><div class="kv"><span>QQQ</span><span>${m.qqq?.price ?? '—'} (${m.qqq?.chg ?? '—'}%)</span></div><div class="kv"><span>VIX</span><span>${m.vix?.price ?? '—'}</span></div><div class="kv"><span>DXY</span><span>${m.dxy?.price ?? '—'}</span></div><div class="kv"><span>10Y</span><span>${m.tnx?.price ?? '—'}</span></div>`;
 }
@@ -82,8 +86,12 @@ function renderWatchlist(data) {
 function renderBacktest(data) {
   const status = document.getElementById('backtestStatus');
   const panel = document.getElementById('backtestPanel');
-  if (!data || !data.buckets) { status.textContent = 'No backtest data available.'; panel.innerHTML = ''; return; }
+  const validation = data?.validation || {};
+  const validationPanel = document.getElementById('validationPanel');
+  if (!data || !data.buckets) { status.textContent = 'No backtest data available.'; panel.innerHTML = ''; validationPanel.innerHTML = ''; return; }
   status.textContent = data.updatedAt ? `Updated ${new Date(data.updatedAt).toLocaleTimeString()}` : 'Ready';
+  const sampleTone = validation.sampleQuality === 'better' ? 'good' : validation.sampleQuality === 'thin' ? 'warn' : 'bad';
+  validationPanel.innerHTML = `<div class="validation-shell"><div class="validation-header"><div><div class="metric-label">VALIDATION READ</div><div class="validation-title ${sampleTone}">${(validation.sampleQuality || 'unknown').replace('_',' ')}</div></div><div class="validation-samples">${validation.evaluatedSamples ?? 0} eval samples</div></div><div class="validation-grid"><div class="validation-stat"><span>Forward edge 5D</span><strong>${validation.forwardEdge5d != null ? validation.forwardEdge5d + '%' : '—'}</strong></div><div class="validation-stat"><span>Caution avg 5D</span><strong>${validation.cautionAvg5d != null ? validation.cautionAvg5d + '%' : '—'}</strong></div></div><div class="trust-list">${(validation.warnings || []).length ? validation.warnings.map(w => pill(w, sampleTone === 'good' ? 'warn' : 'bad')).join('') : pill('validation sample in decent shape', 'good')}</div></div>`;
   const buckets = ['YES', 'CAUTION', 'NO'];
   panel.innerHTML = `<div class="bt-grid">${buckets.map(key => { const b = data.buckets[key] || {}; const col = key === 'YES' ? 'var(--green)' : key === 'CAUTION' ? 'var(--amber)' : 'var(--red)'; return `<div class="bt-card"><div class="kv"><span style="color:${col};font-weight:700">${key}</span><span class="muted">${b.count || 0} entries</span></div><div class="kv"><span>Avg 1D</span><span>${b.avg1d != null ? b.avg1d + '%' : '—'}</span></div><div class="kv"><span>Avg 5D</span><span>${b.avg5d != null ? b.avg5d + '%' : '—'}</span></div><div class="kv"><span>Avg 10D</span><span>${b.avg10d != null ? b.avg10d + '%' : '—'}</span></div><div class="kv"><span>Win 1D</span><span>${b.winRate1d != null ? b.winRate1d + '%' : '—'}</span></div><div class="kv"><span>Win 5D</span><span>${b.winRate5d != null ? b.winRate5d + '%' : '—'}</span></div><div class="kv"><span>Win 10D</span><span>${b.winRate10d != null ? b.winRate10d + '%' : '—'}</span></div></div>`; }).join('')}</div><div style="margin-top:8px;font-size:10px;color:var(--text3);">Interpret this as a permission study, not a directional market forecast. A NO bucket can still include positive forward returns if broad conditions were poor for clean entries but index drift stayed positive.</div>`;
 }

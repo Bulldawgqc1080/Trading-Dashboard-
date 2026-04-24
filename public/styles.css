@@ -157,6 +157,7 @@ body{display:flex;flex-direction:column}
 }
 
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .grid-5{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
 .info-panels .card,.bottom-panels .card,.section-card{min-height:100%}
 .section-status{margin-bottom:12px}
@@ -191,6 +192,23 @@ body{display:flex;flex-direction:column}
   gap:10px;
   padding:16px;
 }
+.trust-label.good{color:var(--green)}
+.trust-label.warn{color:var(--amber)}
+.trust-label.bad{color:var(--red)}
+.trust-list{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.trust-note{margin-top:10px;font-size:10px;line-height:1.55;color:var(--text3)}
+.validation-panel{margin-bottom:12px}
+.validation-shell{padding:14px 16px;border-radius:14px;background:linear-gradient(180deg,rgba(8,17,26,.95) 0%,rgba(12,24,36,.92) 100%);border:1px solid rgba(89,208,255,.08)}
+.validation-header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px}
+.validation-title{font-size:18px;font-weight:700;text-transform:capitalize}
+.validation-title.good{color:var(--green)}
+.validation-title.warn{color:var(--amber)}
+.validation-title.bad{color:var(--red)}
+.validation-samples{font-size:11px;color:var(--text2)}
+.validation-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.validation-stat{padding:10px 12px;border-radius:12px;background:rgba(19,37,54,.45);border:1px solid rgba(89,208,255,.08);display:flex;flex-direction:column;gap:4px}
+.validation-stat span{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px}
+.validation-stat strong{font-size:18px;color:var(--text)}
 .score-row-good{background:linear-gradient(180deg,rgba(12,28,29,.96) 0%,rgba(9,20,31,.98) 100%)}
 .score-row-warn{background:linear-gradient(180deg,rgba(30,24,13,.96) 0%,rgba(9,20,31,.98) 100%)}
 .score-row-bad{background:linear-gradient(180deg,rgba(31,16,18,.96) 0%,rgba(9,20,31,.98) 100%)}
@@ -244,10 +262,11 @@ body{display:flex;flex-direction:column}
 
 @media(max-width:1180px){
   .grid-5{grid-template-columns:repeat(3,1fr)}
+  .grid-3{grid-template-columns:1fr}
 }
 
 @media(max-width:980px){
-  .hero,.grid-2,.grid-5{grid-template-columns:1fr}
+  .hero,.grid-2,.grid-3,.grid-5,.validation-grid{grid-template-columns:1fr}
   .dashboard-shell{padding:14px}
   .decision-card{min-height:auto;position:static}
 }

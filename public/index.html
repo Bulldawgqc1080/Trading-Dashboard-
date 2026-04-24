@@ -80,10 +80,14 @@
       <div class="grid-5 category-grid" id="categoryGrid"></div>
     </section>
 
-    <section class="grid-2 info-panels">
+    <section class="grid-3 info-panels">
       <div class="card">
         <div class="metric-label">DATA QUALITY</div>
         <div id="quality"></div>
+      </div>
+      <div class="card">
+        <div class="metric-label">MODEL TRUST</div>
+        <div id="modelTrust"></div>
       </div>
       <div class="card">
         <div class="metric-label">MARKET SNAPSHOT</div>
@@ -111,6 +115,7 @@
           </div>
         </div>
         <div id="backtestStatus" class="muted section-status">Loading backtest...</div>
+        <div id="validationPanel" class="validation-panel"></div>
         <div id="backtestPanel"></div>
       </div>
       <div class="card section-card">
