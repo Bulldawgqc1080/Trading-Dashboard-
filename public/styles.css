@@ -206,7 +206,7 @@ body{display:flex;flex-direction:column}
   padding:14px;
   display:flex;
   flex-direction:column;
-  gap:10px;
+  gap:8px;
 }
 .wl-card.ACTIONABLE{border-left:4px solid var(--green)}
 .wl-card.WATCH{border-left:4px solid var(--amber)}
@@ -216,9 +216,9 @@ body{display:flex;flex-direction:column}
 .wl-price{font-size:14px;font-weight:600;line-height:1.5}
 .wl-note{
   font-size:11px;
-  line-height:1.65;
+  line-height:1.55;
   color:var(--text2);
-  padding:10px 12px;
+  padding:9px 11px;
   background:rgba(10,21,32,.9);
   border:1px solid rgba(95,122,142,.18);
   border-radius:12px;
@@ -255,10 +255,17 @@ body{display:flex;flex-direction:column}
 @media(max-width:640px){
   html,body{font-size:12px}
   .topbar,.footer{padding:12px 14px}
-  .dashboard-shell{gap:14px;padding:12px}
-  .card{padding:16px;border-radius:16px}
+  .dashboard-shell{gap:12px;padding:10px}
+  .card{padding:14px;border-radius:14px}
   .decision{font-size:28px}
   .big-score{font-size:46px}
   .confidence-readout{font-size:20px}
+  .today-call{padding:12px 13px}
+  .summary-text,.guidance-text,.today-call-text{font-size:13px;line-height:1.65}
+  .subcard{padding:12px}
   .watchlist-grid,.bt-grid{grid-template-columns:1fr}
+  .wl-card{padding:12px}
+  .wl-levels{grid-template-columns:1fr}
+  .wl-row{align-items:flex-start}
+  .wl-price{font-size:13px}
 }
