@@ -4,6 +4,7 @@ const BACKTEST_URL = '/api/backtest';
 const JOURNAL_URL = '/api/journal';
 
 function scoreColor(s){return s>=70?'var(--green)':s>=45?'var(--amber)':'var(--red)'}
+function scoreTone(s){return s>=70?'good':s>=45?'warn':'bad'}
 function pill(text, cls){return `<span class="pill ${cls}">${text}</span>`}
 
 function renderUnavailable(data) {
@@ -45,7 +46,7 @@ function renderMarket(data) {
   document.getElementById('reasons').innerHTML = (data.topReasons || []).map(r => pill(r, 'good')).join('') || '<span class="muted">—</span>';
   document.getElementById('blockers').innerHTML = (data.blockers || []).map(r => pill(r, 'bad')).join('') || '<span class="muted">—</span>';
   const cats = data.categoryScores || {};
-  document.getElementById('categoryGrid').innerHTML = Object.entries(cats).map(([k,v]) => `<div class="card score-row"><div class="metric-label">${k.toUpperCase()}</div><div style="font-size:24px;font-weight:700;color:${scoreColor(v)}">${v}</div><div class="track"><div class="fill" style="width:${v}%;background:${scoreColor(v)}"></div></div></div>`).join('');
+  document.getElementById('categoryGrid').innerHTML = Object.entries(cats).map(([k,v]) => `<div class="card score-row score-row-${scoreTone(v)}"><div class="metric-label">${k.toUpperCase()}</div><div class="score-number" style="color:${scoreColor(v)}">${v}</div><div class="track"><div class="fill" style="width:${v}%;background:${scoreColor(v)}"></div></div></div>`).join('');
   const dq = data.dataQuality || {};
   document.getElementById('quality').innerHTML = `<div class="kv"><span>Quality</span><span>${dq.label || '—'}</span></div><div class="kv"><span>Proxy inputs</span><span class="subtle">${(dq.proxyInputs || []).join(', ') || 'none'}</span></div><div class="kv"><span>Missing inputs</span><span class="subtle">${(dq.missingInputs || []).join(', ') || 'none'}</span></div><div class="kv"><span>Stale feeds</span><span class="subtle">${(dq.staleFeeds || []).join(', ') || 'none'}</span></div><div class="kv"><span>Feed errors</span><span class="subtle">${(dq.errors || []).join(', ') || 'none'}</span></div><div style="margin-top:8px;font-size:10px;color:var(--text3);">This is a market permission tool, not a directional prediction engine.</div>`;
   const m = data.market || {};
@@ -74,7 +75,7 @@ function renderJournal(data) {
   const panel = document.getElementById('journalPanel');
   if (!data || !data.journal || !data.journal.length) { status.textContent = 'No journal data available.'; panel.innerHTML = ''; return; }
   status.textContent = `${data.count} total entries`;
-  panel.innerHTML = `<div class="journal-list">${data.journal.slice(-8).reverse().map(j => { const col = j.decision === 'YES' ? 'var(--green)' : j.decision === 'CAUTION' ? 'var(--amber)' : 'var(--red)'; return `<div class="journal-item"><div class="kv"><span style="color:${col};font-weight:700">${j.date} · ${j.decision || '—'}</span><span>score ${j.score ?? '—'}</span></div><div class="kv"><span>Confidence</span><span>${j.confidenceScore ?? '—'}</span></div><div class="kv"><span>SPY</span><span>${j.spyEntry ?? '—'}</span></div><div class="kv"><span>1D / 5D / 10D</span><span>${j.outcome1d ?? '—'} / ${j.outcome5d ?? '—'} / ${j.outcome10d ?? '—'}</span></div><div>${(j.topReasons || []).map(r => pill(r, 'good')).join('')}</div></div>`; }).join('')}</div><div style="margin-top:8px;font-size:10px;color:var(--text3);">Older journal rows may have incomplete fields because they were logged before the current schema.</div>`;
+  panel.innerHTML = `<div class="journal-list">${data.journal.slice(-6).reverse().map(j => { const col = j.decision === 'YES' ? 'var(--green)' : j.decision === 'CAUTION' ? 'var(--amber)' : 'var(--red)'; return `<div class="journal-item"><div class="kv"><span style="color:${col};font-weight:700">${j.date} · ${j.decision || '—'}</span><span>score ${j.score ?? '—'}</span></div><div class="kv"><span>Confidence</span><span>${j.confidenceScore ?? '—'}</span></div><div class="kv"><span>SPY</span><span>${j.spyEntry ?? '—'}</span></div><div class="kv"><span>1D / 5D / 10D</span><span>${j.outcome1d ?? '—'} / ${j.outcome5d ?? '—'} / ${j.outcome10d ?? '—'}</span></div><div>${(j.topReasons || []).map(r => pill(r, 'good')).join('')}</div></div>`; }).join('')}</div><div style="margin-top:8px;font-size:10px;color:var(--text3);">Older journal rows may have incomplete fields because they were logged before the current schema.</div>`;
 }
 
 async function loadJson(url) {
