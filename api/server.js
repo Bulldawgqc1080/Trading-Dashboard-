@@ -1,4 +1,5 @@
 const http = require('http');
+const { normalizeQuote } = require('../lib/quotes');
 const https = require('https');
 const url = require('url');
 
@@ -51,22 +52,10 @@ async function fetchSingleQuote(symbol, feedKey) {
       feedHealth[feedKey] = { status: 'error', error: 'No result', ts: Date.now(), latency: Date.now() - start };
       return null;
     }
-    const meta = result.meta || {};
-    const closes = result.indicators?.quote?.[0]?.close || [];
-    const timestamps = result.timestamp || [];
-    const validCloses = closes.filter(c => c !== null && !isNaN(c));
-    const price = meta.regularMarketPrice || validCloses[validCloses.length - 1] || 0;
-    const todayTs = new Date(); todayTs.setHours(0,0,0,0);
-    const todayEpoch = todayTs.getTime() / 1000;
-    let prev = 0;
-    for (let i = timestamps.length - 1; i >= 0; i--) {
-      if (timestamps[i] < todayEpoch && closes[i] !== null && !isNaN(closes[i])) { prev = closes[i]; break; }
-    }
-    if (!prev) prev = meta.chartPreviousClose || validCloses[validCloses.length - 2] || price;
-    const change = price - prev;
-    const changePct = prev > 0 ? (change / prev) * 100 : 0;
-    feedHealth[feedKey] = { status: 'ok', ts: Date.now(), latency: Date.now() - start, price };
-    return { price: Math.round(price * 100) / 100, change: Math.round(change * 100) / 100, changePct: Math.round(changePct * 100) / 100, prev: Math.round(prev * 100) / 100, closes: validCloses };
+    const quote = normalizeQuote(result);
+    if (!quote.price || quote.changePct == null) throw new Error('Incomplete quote or previous session close');
+    feedHealth[feedKey] = { status: 'ok', ts: Date.now(), latency: Date.now() - start, price: quote.price, quoteAsOf: quote.quoteAsOf };
+    return quote;
   } catch (e) {
     feedHealth[feedKey] = { status: 'error', error: e.message, ts: Date.now(), latency: Date.now() - start };
     return null;
@@ -112,7 +101,7 @@ async function buildMarketData() {
   const sectorNames = { XLK:'Technology', XLF:'Financials', XLE:'Energy', XLV:'Health Care', XLI:'Industrials', XLY:'Cons Discret', XLP:'Cons Staples', XLU:'Utilities', XLB:'Materials', XLRE:'Real Estate', XLC:'Comm Services' };
   const [spy, qqq, vix, dxy, tnx, spyHistory, qqqHistory, vixHistory, tnxHistory, dxyHistory, ...sectorResults] = await Promise.all([
     fetchSingleQuote('SPY', 'SPY'), fetchSingleQuote('QQQ', 'QQQ'), fetchSingleQuote('^VIX', 'VIX'), fetchSingleQuote('DX-Y.NYB', 'DXY'), fetchSingleQuote('^TNX', 'TNX'),
-    fetchYahooHistory('SPY', 300), fetchYahooHistory('QQQ', 120), fetchYahooHistory('^VIX', 30), fetchYahooHistory('^TNX', 20), fetchYahooHistory('DX-Y.NYB', 20),
+    fetchYahooHistory('SPY', 500), fetchYahooHistory('QQQ', 180), fetchYahooHistory('^VIX', 30), fetchYahooHistory('^TNX', 20), fetchYahooHistory('DX-Y.NYB', 20),
     ...sectorSyms.map(s => fetchSingleQuote(s, s))
   ]);
 
@@ -126,14 +115,15 @@ async function buildMarketData() {
 
   return {
     publicData: {
-      spy: { price: spyPrice, chg: spy?.changePct ?? 0, dollar: spy?.change ?? 0 },
+      spy: { price: spyPrice, chg: spy?.changePct ?? null, dollar: spy?.change ?? null, quoteAsOf: spy?.quoteAsOf },
       qqq: { price: qqqPrice, chg: qqq?.changePct ?? 0, dollar: qqq?.change ?? 0 },
       vix: { price: vixLevel, chg: vix?.changePct ?? 0 },
       dxy: { price: dxyPrice, chg: dxy?.changePct ?? 0 },
       tnx: { price: tnxLevel, chg: tnx?.changePct ?? 0 },
       spyVs20: spyEma21 && spyPrice > spyEma21 ? 'above' : 'below',
       spyVs50: spySma89 && spyPrice > spySma89 ? 'above' : 'below',
-      spyVs200: spySma233 && spyPrice > spySma233 ? 'above' : 'below',
+      spyVs200: spySma233 ? (spyPrice > spySma233 ? 'above' : 'below') : 'unknown',
+      indicatorHistoryComplete: !!(spySma233 && spySma89 && qqqSma89),
       spyEma21AboveSma89: !!(spyEma21 && spySma89 && spyEma21 > spySma89),
       spySma89AboveSma233: !!(spySma89 && spySma233 && spySma89 > spySma233),
       qqqVs50: qqqSma89 ? (qqqPrice > qqqSma89 ? 'above' : 'below') : 'unknown',
@@ -155,7 +145,7 @@ async function buildMarketData() {
       fedStance: 'neutral',
       macroMode: 'partial',
       putCallMode: 'unavailable',
-      fomc72hr: false,
+      fomc72hr: null,
       marketOpen: marketStatus.open,
       marketStatus: marketStatus.label,
       sectors,

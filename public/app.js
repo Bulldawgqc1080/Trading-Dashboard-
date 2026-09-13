@@ -3,6 +3,7 @@ const WATCHLIST_URL = '/api/watchlist';
 const BACKTEST_URL = '/api/backtest';
 const JOURNAL_URL = '/api/journal';
 
+function quoteStamp(value){return value && !isNaN(Date.parse(value)) ? new Date(value).toLocaleString('en-US', { timeZone: 'America/New_York', timeZoneName: 'short' }) : 'unavailable'}
 function scoreColor(s){return s>=70?'var(--green)':s>=45?'var(--amber)':'var(--red)'}
 function scoreTone(s){return s>=70?'good':s>=45?'warn':'bad'}
 function pill(text, cls){return `<span class="pill ${cls}">${text}</span>`}
@@ -47,10 +48,11 @@ function decisionDisplay(data) {
 }
 
 function renderMarket(data) {
-  const bannerClass = data.status === 'ok' ? 'ok' : 'warn';
-  const bannerText = data.status === 'ok'
-    ? 'System healthy — permission read allowed.'
-    : `System degraded — use reduced confidence. ${data.systemStatus?.reason || ''}`;
+  const limited = data.status !== 'ok' || (data.dataQuality?.proxyInputs || []).length || (data.dataQuality?.missingInputs || []).length;
+  const bannerClass = limited ? 'warn' : 'ok';
+  const bannerText = limited
+    ? 'Analysis limited — some inputs are estimated or missing. Feed connectivity does not establish signal accuracy.'
+    : 'Feeds responding — review input quality and validation below.';
   document.getElementById('statusBanner').innerHTML = `<div class="banner ${bannerClass}">${bannerText}</div>`;
   document.getElementById('decision').textContent = decisionDisplay(data);
   document.getElementById('decision').className = `decision ${data.decision || 'NO'}`;
@@ -61,17 +63,17 @@ function renderMarket(data) {
   document.getElementById('confidence').textContent = `${data.confidenceLabel} (${data.confidenceScore})`;
   document.getElementById('confidence').style.color = scoreColor(data.confidenceScore);
   document.getElementById('todayCall').textContent = todayCallText(data);
-  document.getElementById('timestamp').textContent = data.timestamp ? `Updated ${new Date(data.timestamp).toLocaleTimeString()}` : '';
+  document.getElementById('timestamp').textContent = data.timestamp ? `Dashboard refreshed ${new Date(data.timestamp).toLocaleString()} · SPY quote as of ${quoteStamp(data.market?.spy?.quoteAsOf)}` : '';
   document.getElementById('summary').textContent = data.summary || '';
   document.getElementById('guidance').textContent = `${data.guidance || ''} ${data.interpretation || ''}`.trim();
-  document.getElementById('reasons').innerHTML = (data.topReasons || []).map(r => pill(r, 'good')).join('') || '<span class="muted">—</span>';
+  document.getElementById('reasons').innerHTML = (data.topReasons || []).map(r => pill(r, data.decision === 'YES' ? 'good' : 'warn')).join('') || '<span class="muted">—</span>';
   document.getElementById('blockers').innerHTML = (data.blockers || []).map(r => pill(r, 'bad')).join('') || '<span class="muted">—</span>';
   const cats = data.categoryScores || {};
   document.getElementById('categoryGrid').innerHTML = Object.entries(cats).map(([k,v]) => `<div class="card score-row score-row-${scoreTone(v)}"><div class="metric-label">${k.toUpperCase()}</div><div class="score-number" style="color:${scoreColor(v)}">${v}</div><div class="track"><div class="fill" style="width:${v}%;background:${scoreColor(v)}"></div></div></div>`).join('');
   const dq = data.dataQuality || {};
-  document.getElementById('quality').innerHTML = `<div class="kv"><span>Quality</span><span>${dq.label || '—'}</span></div><div class="kv"><span>Proxy inputs</span><span class="subtle">${(dq.proxyInputs || []).join(', ') || 'none'}</span></div><div class="kv"><span>Missing inputs</span><span class="subtle">${(dq.missingInputs || []).join(', ') || 'none'}</span></div><div class="kv"><span>Stale feeds</span><span class="subtle">${(dq.staleFeeds || []).join(', ') || 'none'}</span></div><div class="kv"><span>Feed errors</span><span class="subtle">${(dq.errors || []).join(', ') || 'none'}</span></div><div style="margin-top:8px;font-size:10px;color:var(--text3);">This is a market permission tool, not a directional prediction engine.</div>`;
+  document.getElementById('quality').innerHTML = `<div class="kv"><span>Feed connectivity</span><span>${dq.label || '—'}</span></div><div class="kv"><span>Proxy inputs</span><span class="subtle">${(dq.proxyInputs || []).join(', ') || 'none'}</span></div><div class="kv"><span>Missing inputs</span><span class="subtle">${(dq.missingInputs || []).join(', ') || 'none'}</span></div><div class="kv"><span>Stale feeds</span><span class="subtle">${(dq.staleFeeds || []).join(', ') || 'none'}</span></div><div class="kv"><span>Feed errors</span><span class="subtle">${(dq.errors || []).join(', ') || 'none'}</span></div><div style="margin-top:8px;font-size:10px;color:var(--text3);">This is a market permission tool, not a directional prediction engine.</div>`;
   const warnings = data.validationWarnings || [];
-  document.getElementById('modelTrust').innerHTML = `<div class="kv"><span>Confidence</span><span class="trust-label ${trustTone(data.confidenceScore)}">${data.confidenceLabel} (${data.confidenceScore})</span></div><div class="kv"><span>Model version</span><span class="subtle">${data.modelVersion || '—'}</span></div><div class="kv"><span>Warnings</span><span class="subtle">${warnings.length}</span></div><div class="trust-list">${warnings.length ? warnings.map(w => pill(w, 'warn')).join('') : pill('no active trust warnings', 'good')}</div><div class="trust-note">Trust the read more when data is direct, current, and validated by enough samples.</div>`;
+  document.getElementById('modelTrust').innerHTML = `<div class="kv"><span>Input confidence</span><span class="trust-label ${trustTone(data.confidenceScore)}">${data.confidenceLabel} (${data.confidenceScore})</span></div><div class="kv"><span>Model version</span><span class="subtle">${data.modelVersion || '—'}</span></div><div class="kv"><span>Warnings</span><span class="subtle">${warnings.length}</span></div><div class="trust-list">${warnings.length ? warnings.map(w => pill(w, 'warn')).join('') : pill('no active trust warnings', 'good')}</div><div class="trust-note">Rule-based input-quality score, not probability of profit or forecast accuracy. Starts at 100 and deducts for proxies, missing inputs, closed markets and feed issues. Deductions: ${(data.confidenceReasons || []).join('; ') || 'none'}. Predictive validation is shown separately below.</div>`;
   const m = data.market || {};
   document.getElementById('snapshot').innerHTML = `<div class="kv"><span>SPY</span><span>${m.spy?.price ?? '—'} (${m.spy?.chg ?? '—'}%)</span></div><div class="kv"><span>QQQ</span><span>${m.qqq?.price ?? '—'} (${m.qqq?.chg ?? '—'}%)</span></div><div class="kv"><span>VIX</span><span>${m.vix?.price ?? '—'}</span></div><div class="kv"><span>DXY</span><span>${m.dxy?.price ?? '—'}</span></div><div class="kv"><span>10Y</span><span>${m.tnx?.price ?? '—'}</span></div>`;
 }
@@ -81,7 +83,7 @@ function renderWatchlist(data) {
   const grid = document.getElementById('watchlistGrid');
   if (!data || !data.stocks || !data.stocks.length) { statusEl.textContent = 'No watchlist data available.'; grid.innerHTML = ''; return; }
   statusEl.textContent = data.cached ? 'Watchlist loaded (cached).' : 'Watchlist loaded.';
-  grid.innerHTML = data.stocks.map(s => `<div class="wl-card ${s.verdict}"><div class="wl-row"><div><div class="wl-sym">${s.symbol}</div><div class="wl-price">$${Number(s.price).toFixed(2)} <span style="font-size:11px;color:${s.changePct >= 0 ? 'var(--green)' : 'var(--red)'}">${s.changePct >= 0 ? '+' : ''}${s.changePct.toFixed(2)}%</span></div></div><div class="wl-badge ${s.verdict}">${s.verdict}</div></div><div class="wl-note">${s.signal?.shortReason || '—'}</div><div class="wl-levels"><div class="kv"><span>Setup</span><span style="color:${scoreColor(s.setupScore)}">${s.setupScore}</span></div><div class="kv"><span>Momentum</span><span style="color:${scoreColor(s.momentumScore)}">${s.momentumScore}</span></div><div class="kv"><span>RS vs SPY</span><span>${s.relStrength >= 0 ? '+' : ''}${s.relStrength.toFixed(1)}%</span></div><div class="kv"><span>Support / 20D</span><span>${s.support ?? '—'} / ${s.resistance ?? '—'}</span></div></div><div><div class="wl-section-title">WHY IT SCORES THIS WAY</div><div class="wl-list">${(s.why || []).slice(0,3).map(r => pill(r, 'good')).join('') || '<span class="muted">—</span>'}</div></div><div><div class="wl-section-title">WHAT NEEDS TO IMPROVE</div><div class="wl-list">${(s.needs || []).slice(0,2).map(r => pill(r, 'warn')).join('') || '<span class="muted">—</span>'}</div></div></div>`).join('');
+  grid.innerHTML = data.stocks.map(s => `<div class="wl-card ${s.verdict}"><div class="wl-row"><div><div class="wl-sym">${s.symbol}</div><div class="wl-price">$${Number(s.price).toFixed(2)} <span style="font-size:11px;color:${s.changePct >= 0 ? 'var(--green)' : 'var(--red)'}">${s.changePct >= 0 ? '+' : ''}${s.changePct.toFixed(2)}%</span></div></div><div class="wl-badge ${s.verdict}">${s.verdict}</div></div><div class="wl-note">${s.signal?.shortReason || '—'}</div><div class="wl-levels"><div class="kv"><span>Setup</span><span style="color:${scoreColor(s.setupScore)}">${s.setupScore}</span></div><div class="kv"><span>Momentum</span><span style="color:${scoreColor(s.momentumScore)}">${s.momentumScore}</span></div><div class="kv"><span>RS vs SPY</span><span>${s.relStrength >= 0 ? '+' : ''}${s.relStrength.toFixed(1)}%</span></div><div class="kv"><span>Support / 20D</span><span>${s.support ?? '—'} / ${s.resistance ?? '—'}</span></div></div><div><div class="wl-section-title">WHY IT SCORES THIS WAY</div><div class="wl-list">${(s.why || []).slice(0,3).map(r => pill(r, '')).join('') || '<span class="muted">—</span>'}</div></div><div><div class="wl-section-title">WHAT NEEDS TO IMPROVE</div><div class="wl-list">${(s.needs || []).map(r => pill(r, 'warn')).join('') || '<span class="muted">—</span>'}</div></div></div>`).join('');
 }
 
 function renderBacktest(data) {
@@ -104,7 +106,7 @@ function renderJournal(data) {
   const panel = document.getElementById('journalPanel');
   if (!data || !data.journal || !data.journal.length) { status.textContent = 'No journal data available.'; panel.innerHTML = ''; return; }
   status.textContent = `${data.count} total entries`;
-  panel.innerHTML = `<div class="journal-list">${data.journal.slice(-6).reverse().map(j => { const col = j.decision === 'YES' ? 'var(--green)' : j.decision === 'CAUTION' ? 'var(--amber)' : 'var(--red)'; return `<div class="journal-item"><div class="kv"><span style="color:${col};font-weight:700">${j.date} · ${j.decision || '—'}</span><span>score ${j.score ?? '—'}</span></div><div class="kv"><span>Confidence</span><span>${j.confidenceScore ?? '—'}</span></div><div class="kv"><span>SPY</span><span>${j.spyEntry ?? '—'}</span></div><div class="kv"><span>1D / 5D / 10D</span><span>${j.outcome1d ?? '—'} / ${j.outcome5d ?? '—'} / ${j.outcome10d ?? '—'}</span></div><div>${(j.topReasons || []).map(r => pill(r, 'good')).join('')}</div></div>`; }).join('')}</div><div style="margin-top:8px;font-size:10px;color:var(--text3);">Older journal rows may have incomplete fields because they were logged before the current schema.</div>`;
+  panel.innerHTML = `<div class="journal-list">${data.journal.slice(-6).reverse().map(j => { const col = j.decision === 'YES' ? 'var(--green)' : j.decision === 'CAUTION' ? 'var(--amber)' : 'var(--red)'; return `<div class="journal-item"><div class="kv"><span style="color:${col};font-weight:700">${j.date} · ${j.decision || '—'}</span><span>score ${j.score ?? '—'}</span></div><div class="kv"><span>Input confidence</span><span>${j.confidenceScore ?? '—'}</span></div><div class="kv"><span>SPY</span><span>${j.spyEntry ?? '—'}</span></div><div class="kv"><span>1D / 5D / 10D</span><span>${j.outcome1d ?? '—'} / ${j.outcome5d ?? '—'} / ${j.outcome10d ?? '—'}</span></div><div>${(j.topReasons || []).map(r => pill(r, 'good')).join('')}</div></div>`; }).join('')}</div><div style="margin-top:8px;font-size:10px;color:var(--text3);">Older journal rows may have incomplete fields because they were logged before the current schema.</div>`;
 }
 
 async function loadJson(url) {
