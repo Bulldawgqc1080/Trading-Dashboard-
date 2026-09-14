@@ -14,7 +14,8 @@
 .desk-actions,.desk-journal-heading{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:18px 0}.desk-journal-heading{justify-content:space-between;margin-top:28px}
 .desk-errors{padding-left:22px;color:var(--amber);font-size:12px;line-height:1.7;margin:12px 0}
 .desk-candidates{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.desk-candidate{min-width:0;margin:12px 0;padding:18px}.desk-candidate .kv{gap:16px;line-height:1.6}.desk-candidate .kv span:first-child{max-width:70%}
+.desk-engine{margin:22px 0}.desk-rankings{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.desk-ranking{padding:16px}.engine-score{font-size:28px;color:var(--blue);font-weight:700;margin:12px 0}.engine-score small{display:block;color:var(--text2);font-size:10px;font-weight:400}
 .desk-details{margin:16px 0;line-height:1.7;color:var(--text2)}.desk-details summary{cursor:pointer;color:var(--blue)}.desk-details p{margin:12px 0}.desk-details a{color:var(--blue)}
 #ccStorage{color:var(--amber)}.desk-nav{color:var(--blue);margin-left:auto;font-size:12px;text-decoration:none}
-@media(max-width:850px){.desk-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.desk-candidates{grid-template-columns:1fr}}
+@media(max-width:850px){.desk-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.desk-candidates,.desk-rankings{grid-template-columns:1fr}}
 @media(max-width:700px){.desk-fields{grid-template-columns:1fr}#optionsDesk h2{font-size:19px}.desk-candidate{padding:12px}.desk-nav{margin-left:0}}

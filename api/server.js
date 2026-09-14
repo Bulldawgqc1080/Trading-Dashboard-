@@ -10,8 +10,8 @@ const { buildStockVerdict, buildWatchlistSignal } = require('../lib/scoring/watc
 const { getFeedQuality, buildSystemStatus } = require('../lib/health');
 const { loadJournal, logJournalEntry, getJournal } = require('../lib/journal/store');
 const { backfillJournalOutcomes, buildBacktestSummary } = require('../lib/journal/backtest');
-const { buildMstrChain } = require('../lib/options/tradier');
-const { buildSchwabMstrChain } = require('../lib/options/schwab');
+const { buildOptionChain } = require('../lib/options/tradier');
+const { buildSchwabChain } = require('../lib/options/schwab');
 const schwabOauth = require('../lib/schwab/oauth');
 
 let marketCache = { data: null, ts: 0, spyHistory: null };
@@ -326,7 +326,7 @@ const server = http.createServer(async (req, res) => {
         'X-Content-Type-Options': 'nosniff',
         'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"
       });
-      res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Schwab connection failed</title><body style="font:16px system-ui;background:#07111a;color:#d5e4f0;padding:40px;max-width:720px;margin:auto"><h1 style="color:#ffb86b">Schwab connection failed</h1><p>${String(err.message).replace(/[&<>"']/g, '')}</p><p><a style="color:#59d0ff" href="/?schwab=failed#optionsDesk">Return to the MSTR options desk</a></p></body></html>`);
+      res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Schwab connection failed</title><body style="font:16px system-ui;background:#07111a;color:#d5e4f0;padding:40px;max-width:720px;margin:auto"><h1 style="color:#ffb86b">Schwab connection failed</h1><p>${String(err.message).replace(/[&<>"']/g, '')}</p><p><a style="color:#59d0ff" href="/?schwab=failed#optionsDesk">Return to the covered-call desk</a></p></body></html>`);
     }
     return;
   }
@@ -351,7 +351,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (parsed.pathname === '/api/options/mstr') {
+  if (parsed.pathname === '/api/options/chain' || parsed.pathname === '/api/options/mstr') {
+    const symbol = parsed.pathname === '/api/options/mstr' ? 'MSTR' : String(parsed.query.symbol || '').trim().toUpperCase();
+    if (!/^[A-Z][A-Z0-9.-]{0,9}$/.test(symbol)) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, max-age=0' });
+      res.end(JSON.stringify({ status: 'invalid_symbol', error: 'Enter a valid stock or ETF ticker.' }));
+      return;
+    }
     let schwabAuth = { session: null, setCookie: null };
     if (schwabOauth.configured()) {
       try { schwabAuth = await schwabOauth.validSession(req); } catch { schwabAuth = { session: null, setCookie: schwabOauth.clearCookies()[0] }; }
@@ -360,7 +366,7 @@ const server = http.createServer(async (req, res) => {
     if (schwabAuth.setCookie) responseHeaders['Set-Cookie'] = schwabAuth.setCookie;
     if (!schwabAuth.session && !process.env.TRADIER_TOKEN) {
       res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, max-age=0' });
-      res.end(JSON.stringify({ status: schwabOauth.configured() ? 'authorization_required' : 'manual', error: schwabOauth.configured() ? 'Connect Schwab to load the MSTR chain.' : 'Automatic options data is not configured. Use manual broker quotes.', connectUrl: schwabOauth.configured() ? '/api/schwab/login' : null }));
+      res.end(JSON.stringify({ status: schwabOauth.configured() ? 'authorization_required' : 'manual', error: schwabOauth.configured() ? `Connect Schwab to load the ${symbol} chain.` : 'Automatic options data is not configured. Use manual broker quotes.', connectUrl: schwabOauth.configured() ? '/api/schwab/login' : null }));
       return;
     }
     if (parsed.query.probe === '1') {
@@ -370,8 +376,8 @@ const server = http.createServer(async (req, res) => {
     }
     try {
       const data = schwabAuth.session
-        ? await buildSchwabMstrChain({ accessToken: schwabAuth.session.accessToken, minDte: parsed.query.minDte, maxDte: parsed.query.maxDte, minStrike: parsed.query.minStrike })
-        : await buildMstrChain({ request: tradierGet, minDte: parsed.query.minDte, maxDte: parsed.query.maxDte, minStrike: parsed.query.minStrike });
+        ? await buildSchwabChain({ accessToken: schwabAuth.session.accessToken, symbol, minDte: parsed.query.minDte, maxDte: parsed.query.maxDte, minStrike: parsed.query.minStrike })
+        : await buildOptionChain({ request: tradierGet, symbol, minDte: parsed.query.minDte, maxDte: parsed.query.maxDte, minStrike: parsed.query.minStrike });
       res.writeHead(200, responseHeaders);
       res.end(JSON.stringify({ status: 'ok', provider: schwabAuth.session ? 'Schwab' : 'Tradier', delayed: schwabAuth.session ? false : process.env.TRADIER_SANDBOX === 'true', retrievedAt: new Date().toISOString(), marketStatus: getMarketStatus().label, ...data }));
     } catch (err) {
