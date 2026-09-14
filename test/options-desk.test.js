@@ -12,6 +12,8 @@ assert.equal(result.rows[0].metrics.maxPnlCost, 4499);
 assert.equal(result.rows[0].metrics.scenarios.find(x => x.price === 168).difference, -1301);
 assert.equal(evaluate({...position, shares:99}, calls, Date.parse('2026-09-14T14:10:00Z')).eligibleCount, 0);
 assert.equal(evaluate(position, calls, Date.parse('2026-09-14T14:21:00Z')).eligibleCount, 0);
+assert.equal(evaluate(position, [{...calls[0], quoteAsOf:'2026-09-14T13:00:00Z'}], Date.parse('2026-09-14T14:10:00Z')).eligibleCount, 0);
+assert.equal(evaluate(position, [{...calls[0], quoteAsOf:'2026-09-14T14:05:00Z'}], Date.parse('2026-09-14T14:10:00Z')).eligibleCount, 1);
 assert.equal(evaluate(position, [{...calls[0], strike:149}], Date.parse('2026-09-14T14:10:00Z')).eligibleCount, 0);
 const entry = { position, metrics: result.rows[0].metrics };
 const closed = closePaper(entry, 130, 1, 1);

@@ -373,7 +373,7 @@ const server = http.createServer(async (req, res) => {
         ? await buildSchwabMstrChain({ accessToken: schwabAuth.session.accessToken, minDte: parsed.query.minDte, maxDte: parsed.query.maxDte, minStrike: parsed.query.minStrike })
         : await buildMstrChain({ request: tradierGet, minDte: parsed.query.minDte, maxDte: parsed.query.maxDte, minStrike: parsed.query.minStrike });
       res.writeHead(200, responseHeaders);
-      res.end(JSON.stringify({ status: 'ok', provider: schwabAuth.session ? 'Schwab' : 'Tradier', delayed: schwabAuth.session ? false : process.env.TRADIER_SANDBOX === 'true', retrievedAt: new Date().toISOString(), ...data }));
+      res.end(JSON.stringify({ status: 'ok', provider: schwabAuth.session ? 'Schwab' : 'Tradier', delayed: schwabAuth.session ? false : process.env.TRADIER_SANDBOX === 'true', retrievedAt: new Date().toISOString(), marketStatus: getMarketStatus().label, ...data }));
     } catch (err) {
       res.writeHead(502, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, max-age=0' });
       res.end(JSON.stringify({ status: 'unavailable', error: err.message }));

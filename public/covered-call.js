@@ -56,6 +56,11 @@
     const today = dateOnly(nyDate(now));
     const rows = calls.map(c => {
       const reasons = [...errors];
+      if (c.quoteAsOf) {
+        const optionAge = (now - Date.parse(c.quoteAsOf)) / 60000;
+        if (!Number.isFinite(optionAge) || optionAge < 0) reasons.push('Option quote timestamp is invalid or in the future.');
+        else if (optionAge > 20) reasons.push('This option quote is older than 20 minutes.');
+      }
       const dte = (dateOnly(c.expiration) - today) / day;
       if (!Number.isFinite(dte) || dte < 1) reasons.push('Expiration must be a future calendar date; same-day calls are excluded.');
       else if (dte < number(p.minDte) || dte > number(p.maxDte)) reasons.push('Expiration is outside your day range.');

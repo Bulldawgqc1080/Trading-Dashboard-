@@ -40,17 +40,21 @@ assert.equal(calls[0].quoteAsOf, '2026-09-14T14:00:00.000Z');
 assert.equal(calls[0].delta, .3);
 
 (async () => {
-  let captured;
+  const captured = [];
   const request = async (path, params, token) => {
-    captured = {path,params,token};
-    return {underlyingPrice:140,underlying:{bid:139.9,ask:140.1,quoteTimeInLong:Date.parse('2026-09-14T14:00:00Z')},callExpDateMap:{'2026-10-02:18':{'150.0':[standard]}}};
+    captured.push({path,params,token});
+    if (path.endsWith('/quotes')) return {MSTR:{quote:{lastPrice:140,bidPrice:139.9,askPrice:140.1,quoteTime:Date.parse('2026-09-14T14:05:00Z')}}};
+    return {underlyingPrice:139,callExpDateMap:{'2026-10-02:18':{'150.0':[standard]}}};
   };
   const chain = await buildSchwabMstrChain({request,accessToken:'access-test',minDte:7,maxDte:45,minStrike:140,now:Date.parse('2026-09-14T12:00:00Z')});
-  assert.equal(captured.path, '/marketdata/v1/chains');
-  assert.equal(captured.params.symbol, 'MSTR');
-  assert.equal(captured.params.contractType, 'CALL');
-  assert.equal(captured.token, 'access-test');
+  assert.equal(captured.length, 2);
+  assert.equal(captured[0].path, '/marketdata/v1/chains');
+  assert.equal(captured[0].params.symbol, 'MSTR');
+  assert.equal(captured[0].params.contractType, 'CALL');
+  assert.equal(captured[1].path, '/marketdata/v1/quotes');
+  assert.equal(captured[1].token, 'access-test');
   assert.equal(chain.calls.length, 1);
   assert.equal(chain.underlying.price, 140);
+  assert.equal(chain.underlying.quoteAsOf, '2026-09-14T14:05:00.000Z');
   console.log('schwab.test.js passed');
 })().catch(err => { console.error(err); process.exit(1); });

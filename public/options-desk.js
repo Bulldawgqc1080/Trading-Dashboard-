@@ -62,6 +62,7 @@
   function addRow(values = {}) {
     if (rows.children.length >= 30) return;
     const tr = document.createElement('tr');
+    tr.dataset.quoteAsOf = values.quoteAsOf || '';
     tr.innerHTML = [['expiration','date',''],['strike','number','0.01'],['bid','number','0.01'],['ask','number','0.01'],['oi','number','1']].map(([name,type,step]) => `<td><input aria-label="${name}" data-field="${name}" type="${type}" ${step ? `step="${step}" min="0"` : ''} required></td>`).join('') + '<td><button type="button" aria-label="Remove call">×</button></td>';
     for (const input of tr.querySelectorAll('input')) if (values[input.dataset.field] != null) input.value = values[input.dataset.field];
     tr.querySelector('button').addEventListener('click', () => { tr.remove(); invalidate(); });
@@ -108,12 +109,11 @@
       const selected = (data.calls || []).filter(c => c.strike >= minStrike).slice(0, 30);
       if (!selected.length) throw new Error('No standard MSTR calls matched that strike and expiration range.');
       rows.replaceChildren();
-      selected.forEach(c => addRow({expiration:c.expiration,strike:c.strike,bid:c.bid,ask:c.ask,oi:c.oi}));
+      selected.forEach(c => addRow({expiration:c.expiration,strike:c.strike,bid:c.bid,ask:c.ask,oi:c.oi,quoteAsOf:c.quoteAsOf}));
       if (data.underlying?.price > 0) form.elements.spot.value = data.underlying.price;
       form.elements.source.value = `${data.provider}${data.delayed ? ' sandbox (15-minute delayed)' : ' market-data API'}`;
-      const quoteTimes = [data.underlying?.quoteAsOf, ...selected.map(c => c.quoteAsOf)].filter(Boolean).map(Date.parse).filter(Number.isFinite);
-      form.elements.asOf.value = quoteTimes.length ? localDateTime(new Date(Math.min(...quoteTimes)).toISOString()) : '';
-      status.textContent = `Loaded ${selected.length} standard calls across ${data.expirations.length} expiration(s). Retrieved ${new Date(data.retrievedAt).toLocaleString()}. Review every quote before checking.`;
+      form.elements.asOf.value = data.underlying?.quoteAsOf ? localDateTime(data.underlying.quoteAsOf) : '';
+      status.textContent = `Loaded ${selected.length} standard calls across ${data.expirations.length} expiration(s). Retrieved ${new Date(data.retrievedAt).toLocaleString()}${data.marketStatus && data.marketStatus !== 'MARKET OPEN' ? ` · ${data.marketStatus}: planning only` : ''}. Review every quote before checking.`;
       lastResult = null;
     } catch (err) {
       status.textContent = `Automatic chain unavailable: ${err.message} Manual broker entry remains available.`;
@@ -125,7 +125,7 @@
     position.standard = form.elements.standard.checked;
     position.asOf = position.asOf ? new Date(position.asOf).toISOString() : '';
     position.reserved = position.reserved === '' ? '' : Number(position.reserved) + journal.filter(j => !j.closed).reduce((n,j) => n + Number(j.position.contracts) * 100, 0);
-    const calls = [...rows.children].map(tr => Object.fromEntries([...tr.querySelectorAll('input')].map(i => [i.dataset.field, i.value])));
+    const calls = [...rows.children].map(tr => ({...Object.fromEntries([...tr.querySelectorAll('input')].map(i => [i.dataset.field, i.value])), quoteAsOf: tr.dataset.quoteAsOf || ''}));
     return {position, calls};
   }
   function analyze() {
@@ -138,7 +138,7 @@
       ${result.errors.length ? `<ul class="desk-errors">${result.errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
       ${!calls.length ? '<p class="desk-note">Add at least one call quote.</p>' : ''}
       <p class="desk-note">Source: ${esc(position.source || 'missing')} · Quote time: ${esc(position.asOf || 'missing')} · Assumed sale at bid · No probability-of-profit estimates.</p>
-      <div class="desk-candidates">${result.rows.map((c,i) => `<article class="subcard desk-candidate"><h3>${esc(c.expiration || 'Missing expiration')} · $${esc(c.strike || '—')} call</h3><p class="desk-note">${Number.isFinite(c.dte) ? c.dte : '—'} calendar days · Spread ${c.spread == null ? '—' : c.spread.toFixed(1) + '%'} · ${c.eligible ? 'MEETS FILTERS' : 'DOES NOT QUALIFY'}</p>
+      <div class="desk-candidates">${result.rows.map((c,i) => `<article class="subcard desk-candidate"><h3>${esc(c.expiration || 'Missing expiration')} · $${esc(c.strike || '—')} call</h3><p class="desk-note">${Number.isFinite(c.dte) ? c.dte : '—'} calendar days · Spread ${c.spread == null ? '—' : c.spread.toFixed(1) + '%'} · ${c.eligible ? 'MEETS FILTERS' : 'DOES NOT QUALIFY'}${c.quoteAsOf ? ` · Quote ${esc(new Date(c.quoteAsOf).toLocaleString())}` : ''}</p>
         ${c.reasons.length ? `<ul class="desk-errors">${c.reasons.filter(r => !result.errors.includes(r)).map(r => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
         ${c.metrics ? `<div class="kv"><span>Estimated net premium</span><strong>${money(c.metrics.netPremium)}</strong></div><div class="kv"><span>Max P&amp;L from quote price</span><span>${money(c.metrics.maxPnlNow)}</span></div><div class="kv"><span>Max P&amp;L since cost basis</span><span>${money(c.metrics.maxPnlCost)}</span></div><div class="kv"><span>Cost-basis breakeven / share</span><span>${money(c.metrics.breakevenCost)}</span></div><div class="kv"><span>Loss from quote price if stock hits $0</span><span>${money(c.metrics.lossAtZeroNow)}</span></div>
         <details class="desk-details"><summary>Expiration scenarios vs. holding ${c.metrics.shares} shares</summary><div class="desk-table-wrap"><table class="desk-table"><thead><tr><th>MSTR ends at</th><th>Hold P&amp;L</th><th>Covered P&amp;L</th><th>Difference</th></tr></thead><tbody>${c.metrics.scenarios.map(s => `<tr><td>${money(s.price)}</td><td>${money(s.hold)}</td><td>${money(s.covered)}</td><td>${money(s.difference)}</td></tr>`).join('')}</tbody></table></div><p>Measured from the entered stock quote, not cost basis. Hypothetical expiration prices—not predictions. Closing, assignment fees and taxes excluded.</p></details>` : ''}
