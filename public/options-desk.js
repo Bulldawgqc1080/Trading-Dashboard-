@@ -20,6 +20,7 @@
     if (!positions.MSTR && legacyPosition) positions.MSTR = legacyPosition;
   } catch { storageError = 'Browser storage unavailable or unreadable. Export your journal before leaving.'; }
   let activeSymbol = validTicker(localStorage.getItem(lastSymbolKey)) ? ticker(localStorage.getItem(lastSymbolKey)) : 'MSTR';
+  let eventState = { status:'unknown', date:null, estimated:false, source:'', note:'Load the option chain to check the earnings calendar.' };
   const fields = [
     ['symbol','Ticker','text',activeSymbol,'',''],
     ['shares','Shares owned','number','','1','0'],
@@ -42,6 +43,8 @@
     <p class="desk-note">Load automatic Schwab market data or enter stock and call quotes from the same broker snapshot. A bid is an estimate, not a guaranteed fill. Quotes over 20 minutes old cannot qualify.</p>
     <form id="ccForm">
       <div class="desk-fields">${fields.map(([id,label,type,value,step,min]) => `<label>${label}<input name="${id}" type="${type}" value="${value}" ${step ? `step="${step}" min="${min}"` : ''} ${type === 'text' ? 'maxlength="120"' : ''} required></label>`).join('')}</div>
+      <section class="subcard desk-event"><div><div class="metric-label">SCHEDULED EVENT RISK</div><strong id="ccEventStatus">Not checked</strong><p id="ccEventNote" class="desk-note">Load the option chain to check the earnings calendar.</p></div><label>Manual earnings/company-event date override<input name="manualEventDate" type="date"><small>Optional. Browser-only when holdings are remembered.</small></label></section>
+      <label class="desk-check"><input type="checkbox" name="avoidEvent" checked> Exclude calls expiring on or after the known earnings/company-event date. If unchecked, crossing calls remain eligible but lose 25 ranking points.</label>
       <p class="desk-note">Defaults are editable screening settings, not a recommendation. Quote time uses your device’s timezone; days to expiration use the New York calendar. Automatic contracts use their own timestamps; manual rows use the entered stock/option snapshot time.</p>
       <label class="desk-check"><input type="checkbox" name="rememberPosition"> Remember my holdings and screening rules in this browser only. Live quotes and option rows are never saved.</label>
       <label class="desk-check"><input type="checkbox" name="standard" required> I checked that every row is a standard call delivering exactly 100 shares—not an adjusted contract.</label>
@@ -49,18 +52,34 @@
       <div class="desk-actions"><button type="button" id="ccLoad">Load ${activeSymbol} chain</button><a id="ccConnect" class="desk-connect" href="/api/schwab/login" hidden>Connect Schwab market data</a><a id="ccDisconnect" class="desk-connect muted" href="/api/schwab/logout" hidden>Disconnect Schwab</a><button type="button" id="ccAdd">+ Add call manually</button><button type="submit" class="desk-primary">Check my calls</button></div><div id="ccFeed" class="desk-note" role="status">Checking automatic market-data connection…</div>
     </form>
     <div id="ccResults" aria-live="polite"><p class="desk-note">Add your holdings and at least one broker quote to start. Nothing is prefilled with assumed market prices.</p></div>
-    <details class="desk-details"><summary>How the math works—and what it leaves out</summary><p>One standard call covers 100 shares. Calculations cover only the requested contracts; any remaining shares are excluded. Net premium = bid × 100 × contracts − opening fees. The strike itself must meet your sale-price floor: premium does not override it.</p><p>At expiration, covered-share value is capped at the strike. Scenario P&amp;L = (min(stock price, strike) − starting stock price) × covered shares + net premium. Stock can fall to zero. “Since cost basis” uses your entered average cost, not tax-lot accounting.</p><p>These are mechanical comparisons, not price forecasts or buy/sell advice. Early assignment is possible. Earnings, dividends, taxes, corporate actions, and assignment fees are not modeled. Verify broker option approval and account eligibility. A covered call gives up upside above the strike; a passing filter does not mean it is a good trade.</p><p><a href="https://www.optionseducation.org/strategies/all-strategies/covered-call-buy-write" target="_blank" rel="noopener noreferrer">Covered-call mechanics — Options Industry Council</a></p></details>
+    <details class="desk-details"><summary>How the math works—and what it leaves out</summary><p>One standard call covers 100 shares. Calculations cover only the requested contracts; any remaining shares are excluded. Net premium = bid × 100 × contracts − opening fees. The strike itself must meet your sale-price floor: premium does not override it.</p><p>At expiration, covered-share value is capped at the strike. Scenario P&amp;L = (min(stock price, strike) − starting stock price) × covered shares + net premium. Stock can fall to zero. “Since cost basis” uses your entered average cost, not tax-lot accounting.</p><p>Known earnings dates can be excluded or penalized, but dates may be estimated or revised. Unscheduled news cannot be predicted. Dividends, taxes, corporate actions, and assignment fees are not modeled. Verify broker option approval and account eligibility. A covered call gives up upside above the strike; a passing filter does not mean it is a good trade.</p><p><a href="https://www.optionseducation.org/strategies/all-strategies/covered-call-buy-write" target="_blank" rel="noopener noreferrer">Covered-call mechanics — Options Industry Council</a></p></details>
     <div class="desk-journal-heading"><h3><span data-active-symbol>${activeSymbol}</span> paper journal</h3><button type="button" id="ccExport">Export journal</button></div>
     <p class="desk-note">Entries stay in this browser only—not in the public repository or on a server. They do not sync across devices. Open paper calls reserve shares in this desk. Holdings and rules are saved only when “Remember” is checked; live quotes and option rows are never saved.</p>
     <div id="ccStorage" role="status"></div><div id="ccJournal"></div>`;
   const form = document.getElementById('ccForm');
   const rows = document.getElementById('ccRows');
   let lastResult = null;
-  const savedFieldNames = ['shares','cost','reserved','contracts','minStrike','source','minDte','maxDte','maxSpread','minOi','minPremium','fee'];
-  const positionFields = ['shares','cost','reserved','contracts','minStrike','spot','source','asOf'];
+  const savedFieldNames = ['shares','cost','reserved','contracts','minStrike','source','minDte','maxDte','maxSpread','minOi','minPremium','fee','manualEventDate','avoidEvent'];
+  const positionFields = ['shares','cost','reserved','contracts','minStrike','spot','source','asOf','manualEventDate'];
   function updateSymbolLabels() {
     root.querySelectorAll('[data-active-symbol]').forEach(node => node.textContent = activeSymbol);
     document.getElementById('ccLoad').textContent = `Load ${activeSymbol} chain`;
+  }
+  function renderEvent() {
+    const manual = form.elements.manualEventDate.value;
+    const date = manual || eventState.date;
+    const status = document.getElementById('ccEventStatus');
+    const note = document.getElementById('ccEventNote');
+    if (manual) {
+      status.textContent = `${manual} · MANUAL OVERRIDE`;
+      note.textContent = 'This browser-only date overrides the automatic earnings estimate for screening.';
+    } else if (eventState.status === 'estimated' && date) {
+      status.textContent = `${date} · ESTIMATED EARNINGS`;
+      note.textContent = `${eventState.source}. ${eventState.note}`;
+    } else {
+      status.textContent = eventState.status === 'unavailable' ? 'Calendar unavailable' : 'No estimate returned';
+      note.textContent = `${eventState.note || 'No known date.'} Unknown does not mean event-free.`;
+    }
   }
   function restorePosition(symbol = activeSymbol) {
     try {
@@ -70,22 +89,25 @@
       const saved = positions[symbol];
       if (!saved || typeof saved !== 'object') {
         positionFields.forEach(name => { if (form.elements[name]) form.elements[name].value = name === 'reserved' ? '0' : name === 'contracts' ? '1' : ''; });
+        form.elements.avoidEvent.checked = true;
         form.elements.rememberPosition.checked = false;
         return;
       }
-      for (const name of savedFieldNames) if (saved[name] != null && form.elements[name]) form.elements[name].value = saved[name];
+      for (const name of savedFieldNames) if (name !== 'avoidEvent' && saved[name] != null && form.elements[name]) form.elements[name].value = saved[name];
+      form.elements.avoidEvent.checked = saved.avoidEvent !== false;
       form.elements.rememberPosition.checked = true;
     } catch { storageError = 'Saved position could not be read. Re-enter it and export any paper journal you need.'; }
   }
   function persistPosition() {
     try {
       if (!form.elements.rememberPosition.checked) { delete positions[activeSymbol]; localStorage.setItem(positionsKey, JSON.stringify(positions)); return; }
-      const saved = Object.fromEntries(savedFieldNames.map(name => [name, form.elements[name].value]));
+      const saved = Object.fromEntries(savedFieldNames.filter(name => name !== 'avoidEvent').map(name => [name, form.elements[name].value]));
+      saved.avoidEvent = form.elements.avoidEvent.checked;
       positions[activeSymbol] = saved;
       localStorage.setItem(positionsKey, JSON.stringify(positions));
     } catch { storageError = 'Position settings could not be saved in this browser.'; }
   }
-  restorePosition(); updateSymbolLabels();
+  restorePosition(); updateSymbolLabels(); renderEvent();
   function addRow(values = {}) {
     if (rows.children.length >= 30) return;
     const tr = document.createElement('tr');
@@ -104,15 +126,17 @@
   }
   form.addEventListener('input', event => {
     if (event.target.name !== 'symbol') persistPosition();
+    if (event.target.name === 'manualEventDate') renderEvent();
     invalidate(); renderJournal();
   });
   form.elements.symbol.addEventListener('change', () => {
     const next = ticker(form.elements.symbol.value);
     if (!validTicker(next)) { document.getElementById('ccFeed').textContent = 'Enter a valid stock or ETF ticker.'; return; }
     activeSymbol = next;
+    eventState = { status:'unknown', date:null, estimated:false, source:'', note:'Load the option chain to check the earnings calendar.' };
     form.elements.symbol.value = next;
     localStorage.setItem(lastSymbolKey, next);
-    restorePosition(next); updateSymbolLabels(); rows.replaceChildren(); addRow(); renderJournal(); invalidate();
+    restorePosition(next); updateSymbolLabels(); renderEvent(); rows.replaceChildren(); addRow(); renderJournal(); invalidate();
   });
   document.getElementById('ccAdd').addEventListener('click', addRow);
   function localDateTime(iso) {
@@ -157,6 +181,8 @@
       if (data.underlying?.price > 0) form.elements.spot.value = data.underlying.price;
       form.elements.source.value = `${data.provider}${data.delayed ? ' sandbox (15-minute delayed)' : ' market-data API'}`;
       form.elements.asOf.value = data.underlying?.quoteAsOf ? localDateTime(data.underlying.quoteAsOf) : '';
+      eventState = data.eventRisk || { status:'unknown', date:null, estimated:false, source:'', note:'No earnings-calendar result was returned.' };
+      renderEvent();
       status.textContent = `Loaded ${selected.length} standard calls across ${data.expirations.length} expiration(s). Retrieved ${new Date(data.retrievedAt).toLocaleString()}${data.marketStatus && data.marketStatus !== 'MARKET OPEN' ? ` · ${data.marketStatus}: planning only` : ''}. Review every quote before checking.`;
       lastResult = null;
     } catch (err) {
@@ -168,6 +194,10 @@
     const position = Object.fromEntries(new FormData(form));
     position.symbol = ticker(position.symbol);
     position.standard = form.elements.standard.checked;
+    position.avoidEvent = form.elements.avoidEvent.checked;
+    position.eventDate = position.manualEventDate || eventState.date || '';
+    position.eventSource = position.manualEventDate ? 'Manual override' : eventState.source || '';
+    position.eventEstimated = !position.manualEventDate && eventState.estimated === true;
     position.asOf = position.asOf ? new Date(position.asOf).toISOString() : '';
     position.reserved = position.reserved === '' ? '' : Number(position.reserved) + journal.filter(j => !j.closed && ticker(j.symbol) === position.symbol).reduce((n,j) => n + Number(j.position.contracts) * 100, 0);
     const calls = [...rows.children].map(tr => ({...Object.fromEntries([...tr.querySelectorAll('input')].map(i => [i.dataset.field, i.value])), quoteAsOf: tr.dataset.quoteAsOf || '', delta:tr.dataset.delta === '' ? null : Number(tr.dataset.delta), iv:tr.dataset.iv === '' ? null : Number(tr.dataset.iv), volume:tr.dataset.volume === '' ? null : Number(tr.dataset.volume)}));
@@ -180,12 +210,13 @@
     lastResult = {position, result, ranking};
     const target = document.getElementById('ccResults');
     const title = result.eligibleCount ? `${result.eligibleCount} candidate(s) meet your entered filters` : 'No suitable trade from these inputs';
+    const eventLabel = position.eventDate ? `${position.eventDate} (${position.eventSource || 'known date'}${position.eventEstimated ? ', estimated' : ''})` : 'unknown';
     target.innerHTML = `<div class="banner ${result.eligibleCount ? 'ok' : 'warn'}"><strong>${title}</strong><p>${result.capacity} covered contract(s) available after committed and open paper shares. Passing is not a recommendation.</p></div>
       ${result.errors.length ? `<ul class="desk-errors">${result.errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
       ${!calls.length ? '<p class="desk-note">Add at least one call quote.</p>' : ''}
-      <p class="desk-note">${esc(position.symbol)} · Source: ${esc(position.source || 'missing')} · Stock quote: ${esc(position.asOf || 'missing')} · Assumed sale at bid · Delta is a risk input, not a probability promise.</p>
-      <section class="desk-engine"><h3>Selection engine</h3><p class="desk-note">Decision scores rank only contracts that passed every hard filter. Scores are relative trade-off ratings—not confidence, expected return, or probability of profit. Earnings and company-event risk are not yet included.</p>${ranking.status === 'ok' ? `<div class="desk-rankings">${ranking.profiles.map(profile => { const c = profile.winner; return `<article class="subcard desk-ranking"><div class="metric-label">${esc(profile.label)}</div><strong>${esc(c.expiration)} · $${esc(c.strike)} call</strong><div class="engine-score">${c.decisionScore}<small>/100 decision score</small></div><div class="kv"><span>Delta</span><span>${Math.abs(Number(c.delta)).toFixed(2)}</span></div><div class="kv"><span>Annualized premium yield</span><span>${c.metrics.annualizedPremiumYieldPct.toFixed(1)}%</span></div><div class="kv"><span>Upside cushion</span><span>${c.metrics.upsideCushionPct.toFixed(1)}%</span></div><div class="kv"><span>Spread / open interest</span><span>${c.spread.toFixed(1)}% / ${Number(c.oi).toLocaleString()}</span></div></article>`; }).join('')}</div>` : `<div class="banner warn"><strong>Ranking unavailable</strong><p>${esc(ranking.reason)}</p></div>`}</section>
-      <div class="desk-candidates">${result.rows.map((c,i) => `<article class="subcard desk-candidate"><h3>${esc(c.expiration || 'Missing expiration')} · $${esc(c.strike || '—')} call</h3><p class="desk-note">${Number.isFinite(c.dte) ? c.dte : '—'} calendar days · Spread ${c.spread == null ? '—' : c.spread.toFixed(1) + '%'} · ${c.eligible ? 'MEETS FILTERS' : 'DOES NOT QUALIFY'}${c.quoteAsOf ? ` · Quote ${esc(new Date(c.quoteAsOf).toLocaleString())}` : ''}</p>
+      <p class="desk-note">${esc(position.symbol)} · Source: ${esc(position.source || 'missing')} · Stock quote: ${esc(position.asOf || 'missing')} · Known event: ${esc(eventLabel)} · Assumed sale at bid · Delta is a risk input, not a probability promise.</p>
+      <section class="desk-engine"><h3>Selection engine</h3><p class="desk-note">Decision scores rank only contracts that passed every hard filter. Scores are relative trade-off ratings—not confidence, expected return, or probability of profit. A call crossing a known event is excluded by default; if you allow it, the engine subtracts 25 points.</p>${ranking.status === 'ok' ? `<div class="desk-rankings">${ranking.profiles.map(profile => { const c = profile.winner; return `<article class="subcard desk-ranking"><div class="metric-label">${esc(profile.label)}</div><strong>${esc(c.expiration)} · $${esc(c.strike)} call</strong><div class="engine-score">${c.decisionScore}<small>/100 decision score</small></div><div class="kv"><span>Delta</span><span>${Math.abs(Number(c.delta)).toFixed(2)}</span></div><div class="kv"><span>Annualized premium yield</span><span>${c.metrics.annualizedPremiumYieldPct.toFixed(1)}%</span></div><div class="kv"><span>Upside cushion</span><span>${c.metrics.upsideCushionPct.toFixed(1)}%</span></div><div class="kv"><span>Spread / open interest</span><span>${c.spread.toFixed(1)}% / ${Number(c.oi).toLocaleString()}</span></div><div class="kv"><span>Known-event crossing</span><span>${c.eventRisk?.crosses ? `YES${c.eventPenalty ? ` · −${c.eventPenalty} pts` : ''}` : position.eventDate ? 'NO' : 'UNKNOWN'}</span></div></article>`; }).join('')}</div>` : `<div class="banner warn"><strong>Ranking unavailable</strong><p>${esc(ranking.reason)}</p></div>`}</section>
+      <div class="desk-candidates">${result.rows.map((c,i) => `<article class="subcard desk-candidate"><h3>${esc(c.expiration || 'Missing expiration')} · $${esc(c.strike || '—')} call</h3><p class="desk-note">${Number.isFinite(c.dte) ? c.dte : '—'} calendar days · Spread ${c.spread == null ? '—' : c.spread.toFixed(1) + '%'} · Event ${c.eventRisk?.crosses ? 'CROSSED' : position.eventDate ? 'CLEAR' : 'UNKNOWN'} · ${c.eligible ? 'MEETS FILTERS' : 'DOES NOT QUALIFY'}${c.quoteAsOf ? ` · Quote ${esc(new Date(c.quoteAsOf).toLocaleString())}` : ''}</p>
         ${c.reasons.length ? `<ul class="desk-errors">${c.reasons.filter(r => !result.errors.includes(r)).map(r => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
         ${c.metrics ? `<div class="kv"><span>Estimated net premium</span><strong>${money(c.metrics.netPremium)}</strong></div><div class="kv"><span>Max P&amp;L from quote price</span><span>${money(c.metrics.maxPnlNow)}</span></div><div class="kv"><span>Max P&amp;L since cost basis</span><span>${money(c.metrics.maxPnlCost)}</span></div><div class="kv"><span>Cost-basis breakeven / share</span><span>${money(c.metrics.breakevenCost)}</span></div><div class="kv"><span>Loss from quote price if stock hits $0</span><span>${money(c.metrics.lossAtZeroNow)}</span></div>
         <details class="desk-details"><summary>Expiration scenarios vs. holding ${c.metrics.shares} shares</summary><div class="desk-table-wrap"><table class="desk-table"><thead><tr><th>${esc(position.symbol)} ends at</th><th>Hold P&amp;L</th><th>Covered P&amp;L</th><th>Difference</th></tr></thead><tbody>${c.metrics.scenarios.map(s => `<tr><td>${money(s.price)}</td><td>${money(s.hold)}</td><td>${money(s.covered)}</td><td>${money(s.difference)}</td></tr>`).join('')}</tbody></table></div><p>Measured from the entered stock quote, not cost basis. Hypothetical expiration prices—not predictions. Closing, assignment fees and taxes excluded.</p></details>` : ''}

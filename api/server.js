@@ -12,6 +12,7 @@ const { loadJournal, logJournalEntry, getJournal } = require('../lib/journal/sto
 const { backfillJournalOutcomes, buildBacktestSummary } = require('../lib/journal/backtest');
 const { buildOptionChain } = require('../lib/options/tradier');
 const { buildSchwabChain } = require('../lib/options/schwab');
+const { getEarningsRisk } = require('../lib/events/nasdaq');
 const schwabOauth = require('../lib/schwab/oauth');
 
 let marketCache = { data: null, ts: 0, spyHistory: null };
@@ -375,11 +376,14 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     try {
-      const data = schwabAuth.session
-        ? await buildSchwabChain({ accessToken: schwabAuth.session.accessToken, symbol, minDte: parsed.query.minDte, maxDte: parsed.query.maxDte, minStrike: parsed.query.minStrike })
-        : await buildOptionChain({ request: tradierGet, symbol, minDte: parsed.query.minDte, maxDte: parsed.query.maxDte, minStrike: parsed.query.minStrike });
+      const [data, eventRisk] = await Promise.all([
+        schwabAuth.session
+          ? buildSchwabChain({ accessToken: schwabAuth.session.accessToken, symbol, minDte: parsed.query.minDte, maxDte: parsed.query.maxDte, minStrike: parsed.query.minStrike })
+          : buildOptionChain({ request: tradierGet, symbol, minDte: parsed.query.minDte, maxDte: parsed.query.maxDte, minStrike: parsed.query.minStrike }),
+        getEarningsRisk(symbol)
+      ]);
       res.writeHead(200, responseHeaders);
-      res.end(JSON.stringify({ status: 'ok', provider: schwabAuth.session ? 'Schwab' : 'Tradier', delayed: schwabAuth.session ? false : process.env.TRADIER_SANDBOX === 'true', retrievedAt: new Date().toISOString(), marketStatus: getMarketStatus().label, ...data }));
+      res.end(JSON.stringify({ status: 'ok', provider: schwabAuth.session ? 'Schwab' : 'Tradier', delayed: schwabAuth.session ? false : process.env.TRADIER_SANDBOX === 'true', retrievedAt: new Date().toISOString(), marketStatus: getMarketStatus().label, eventRisk, ...data }));
     } catch (err) {
       res.writeHead(502, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, max-age=0' });
       res.end(JSON.stringify({ status: 'unavailable', error: err.message }));

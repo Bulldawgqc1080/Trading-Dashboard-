@@ -51,6 +51,9 @@
     if (number(p.contracts) > capacity) errors.push(`Only ${capacity} covered contract(s) available. Never sell uncovered calls here.`);
     if (p.standard !== true) errors.push('Confirm these are standard calls delivering 100 shares each, not adjusted contracts.');
     if (!String(p.source || '').trim()) errors.push('Name the broker or source of the quotes.');
+    const eventDate = String(p.eventDate || '').trim();
+    const eventTime = eventDate ? dateOnly(eventDate) : NaN;
+    if (eventDate && !Number.isFinite(eventTime)) errors.push('Known earnings/company-event date must be a valid calendar date.');
     const age = (now - Date.parse(p.asOf)) / 60000;
     if (!Number.isFinite(age) || age < 0) errors.push('Enter a valid quote timestamp that is not in the future.');
     else if (age > 20) errors.push('Quotes are older than 20 minutes. Refresh both stock and option quotes before qualifying a candidate.');
@@ -63,6 +66,7 @@
         else if (optionAge > 20) reasons.push('This option quote is older than 20 minutes.');
       }
       const dte = (dateOnly(c.expiration) - today) / day;
+      const crossesEvent = Number.isFinite(eventTime) && Number.isFinite(dateOnly(c.expiration)) && dateOnly(c.expiration) >= eventTime;
       if (!Number.isFinite(dte) || dte < 1) reasons.push('Expiration must be a future calendar date; same-day calls are excluded.');
       else if (dte < number(p.minDte) || dte > number(p.maxDte)) reasons.push('Expiration is outside your day range.');
       if (!positive(c.strike)) reasons.push('Strike must be greater than zero.');
@@ -81,7 +85,8 @@
         metrics.returnIfAssignedPct = metrics.maxPnlCost / (number(p.cost) * metrics.shares) * 100;
       }
       if (metrics && (metrics.netPremium <= 0 || metrics.netPremium < number(p.minPremium))) reasons.push('Net premium is nonpositive or below your minimum.');
-      return { ...c, dte, spread, metrics, reasons, eligible: reasons.length === 0 };
+      if (crossesEvent && p.avoidEvent === true) reasons.push(`Expiration is on or after the known ${eventDate} earnings/company-event date.`);
+      return { ...c, dte, spread, metrics, eventRisk: { date:eventDate || null, crosses:crossesEvent, source:p.eventSource || null, estimated:p.eventEstimated === true }, reasons, eligible: reasons.length === 0 };
     });
     return { errors, capacity, rows, eligibleCount: rows.filter(x => x.eligible).length };
   }
@@ -121,8 +126,9 @@
           yield: rangeScore(yields, call.metrics.annualizedPremiumYieldPct),
           dte: fitScore(call.dte, profile.targetDte, 30)
         };
-        const score = Object.entries(profile.weights).reduce((sum,[key,weight]) => sum + components[key] * weight / 100, 0);
-        return {...call, decisionScore:Math.round(score), scoreComponents:components};
+        const eventPenalty = call.eventRisk?.crosses ? 25 : 0;
+        const score = Object.entries(profile.weights).reduce((sum,[key,weight]) => sum + components[key] * weight / 100, 0) - eventPenalty;
+        return {...call, decisionScore:Math.round(clamp(score)), eventPenalty, scoreComponents:components};
       }).sort((a,b) => b.decisionScore - a.decisionScore || b.scoreComponents.liquidity - a.scoreComponents.liquidity || a.dte - b.dte || a.strike - b.strike);
       return {...profile,winner:scored[0]};
     });

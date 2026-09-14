@@ -1,6 +1,7 @@
 const assert = require('assert');
 const { evaluate, rankCandidates, closePaper } = require('../public/covered-call');
 const { buildMstrChain, normalizeOption } = require('../lib/options/tradier');
+const { getEarningsRisk, parseNasdaqEarnings } = require('../lib/events/nasdaq');
 
 const position = { shares: 200, reserved: 0, contracts: 1, cost: 110, spot: 140, minStrike: 150, source: 'paper broker', asOf: '2026-09-14T14:00:00Z', minDte: 7, maxDte: 45, maxSpread: 20, minOi: 100, minPremium: 100, fee: 1, standard: true };
 const calls = [{ expiration: '2026-10-02', strike: 150, bid: 5, ask: 5.5, oi: 1000 }];
@@ -25,6 +26,16 @@ assert.equal(ranking.profiles.length, 3);
 assert.equal(ranking.profiles[0].winner.strike, 150);
 assert.equal(ranking.profiles[2].winner.strike, 145);
 assert(Number.isInteger(ranking.profiles[1].winner.decisionScore));
+const beforeEvent = evaluate({...position,eventDate:'2026-10-10',eventSource:'test',eventEstimated:true,avoidEvent:true}, calls, Date.parse('2026-09-14T14:10:00Z'));
+assert.equal(beforeEvent.eligibleCount, 1);
+assert.equal(beforeEvent.rows[0].eventRisk.crosses, false);
+const crossesEvent = evaluate({...position,eventDate:'2026-09-30',eventSource:'test',eventEstimated:true,avoidEvent:true}, calls, Date.parse('2026-09-14T14:10:00Z'));
+assert.equal(crossesEvent.eligibleCount, 0);
+assert(crossesEvent.rows[0].reasons.some(reason => reason.includes('earnings/company-event')));
+const allowedEvent = evaluate({...position,minStrike:140,eventDate:'2026-09-30',avoidEvent:false}, rankedInput, Date.parse('2026-09-14T14:10:00Z'));
+const penalizedRanking = rankCandidates(allowedEvent, position);
+assert.equal(penalizedRanking.status, 'ok');
+assert.equal(penalizedRanking.profiles[0].winner.eventPenalty, 25);
 assert.equal(evaluate(position, [{...calls[0], strike:149}], Date.parse('2026-09-14T14:10:00Z')).eligibleCount, 0);
 const entry = { position, metrics: result.rows[0].metrics };
 const closed = closePaper(entry, 130, 1, 1);
@@ -37,6 +48,12 @@ assert.equal(option.quoteAsOf, '1970-01-01T00:00:00.002Z');
 assert.equal(option.delta, .3);
 
 (async () => {
+  const parsedEvent = parseNasdaqEarnings('MSTR', {data:{announcement:'Earnings announcement* for MSTR: Oct 29, 2026',reportText:'The upcoming earnings date is derived from an algorithm based on historical reporting dates.'}}, '2026-09-14T12:00:00.000Z');
+  assert.equal(parsedEvent.date, '2026-10-29');
+  assert.equal(parsedEvent.estimated, true);
+  const unknownEvent = await getEarningsRisk('SPY', {request:async () => ({data:null}),now:Date.parse('2026-09-14T12:00:00Z')});
+  assert.equal(unknownEvent.status, 'unknown');
+  assert.equal(unknownEvent.date, null);
   const request = async (path, params) => {
     if (path.endsWith('expirations')) return { expirations:{date:['2026-09-18','2026-10-02','2027-01-01']} };
     if (path.endsWith('quotes')) return { quotes:{quote:{symbol:'MSTR',last:140,bid:139.9,ask:140.1,bid_date:Date.parse('2026-09-14T14:00:00Z')}} };
