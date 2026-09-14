@@ -28,9 +28,11 @@ assert(auth.setCookie.includes('SameSite=Lax'));
 
 const standard = { putCall:'CALL', symbol:'MSTR  261002C00150000', strikePrice:150, bid:5, ask:5.5, last:5.2, openInterest:500, multiplier:100, nonStandard:false, expirationDate:'2026-10-02', quoteTimeInLong:Date.parse('2026-09-14T14:00:00Z'), delta:.3, volatility:70 };
 assert.equal(standardContract(standard), true);
+assert.equal(standardContract({...standard, deliverableNote:'100 MSTR'}), true);
 assert.equal(standardContract({...standard, nonStandard:true}), false);
+assert.equal(standardContract({...standard, nonStandard:'true'}), false);
 assert.equal(standardContract({...standard, multiplier:10}), false);
-assert.equal(standardContract({...standard, deliverableNote:'Adjusted'}), false);
+assert.equal(standardContract({...standard, mini:true}), false);
 const calls = flattenCalls({'2026-10-02:18': {'150.0': [standard], '155.0': [{...standard,strikePrice:155,nonStandard:true}]}}, 140);
 assert.equal(calls.length, 1);
 assert.equal(calls[0].strike, 150);
