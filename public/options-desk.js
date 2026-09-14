@@ -32,7 +32,7 @@
       <label class="desk-check"><input type="checkbox" name="rememberPosition"> Remember my holdings and screening rules in this browser only. Live quotes and option rows are never saved.</label>
       <label class="desk-check"><input type="checkbox" name="standard" required> I checked that every row is an MSTR call delivering exactly 100 MSTR shares—not an adjusted contract.</label>
       <div class="desk-table-wrap"><table class="desk-table"><caption>Broker call quotes · premiums in dollars per share</caption><thead><tr><th>Expiration</th><th>Strike ($)</th><th>Bid ($)</th><th>Ask ($)</th><th>Open interest</th><th></th></tr></thead><tbody id="ccRows"></tbody></table></div>
-      <div class="desk-actions"><button type="button" id="ccLoad">Load MSTR chain</button><button type="button" id="ccAdd">+ Add call manually</button><button type="submit" class="desk-primary">Check my calls</button></div><div id="ccFeed" class="desk-note" role="status">Checking whether automatic Tradier data is configured…</div>
+      <div class="desk-actions"><button type="button" id="ccLoad">Load MSTR chain</button><a id="ccConnect" class="desk-connect" href="/api/schwab/login" hidden>Connect Schwab market data</a><a id="ccDisconnect" class="desk-connect muted" href="/api/schwab/logout" hidden>Disconnect Schwab</a><button type="button" id="ccAdd">+ Add call manually</button><button type="submit" class="desk-primary">Check my calls</button></div><div id="ccFeed" class="desk-note" role="status">Checking automatic market-data connection…</div>
     </form>
     <div id="ccResults" aria-live="polite"><p class="desk-note">Add your holdings and at least one broker quote to start. Nothing is prefilled with assumed market prices.</p></div>
     <details class="desk-details"><summary>How the math works—and what it leaves out</summary><p>One standard call covers 100 shares. Calculations cover only the requested contracts; any remaining shares are excluded. Net premium = bid × 100 × contracts − opening fees. The strike itself must meet your sale-price floor: premium does not override it.</p><p>At expiration, covered-share value is capped at the strike. Scenario P&amp;L = (min(stock price, strike) − starting stock price) × covered shares + net premium. Stock can fall to zero. “Since cost basis” uses your entered average cost, not tax-lot accounting.</p><p>These are mechanical comparisons, not price forecasts or buy/sell advice. Early assignment is possible. Earnings, dividends, taxes, corporate actions, and assignment fees are not modeled. Verify broker option approval and account eligibility. A covered call gives up upside above the strike; a passing filter does not mean it is a good trade.</p><p><a href="https://www.optionseducation.org/strategies/all-strategies/covered-call-buy-write" target="_blank" rel="noopener noreferrer">Covered-call mechanics — Options Industry Council</a></p></details>
@@ -81,6 +81,8 @@
   async function loadChain({probe = false} = {}) {
     const button = document.getElementById('ccLoad');
     const status = document.getElementById('ccFeed');
+    const connect = document.getElementById('ccConnect');
+    const disconnect = document.getElementById('ccDisconnect');
     const minStrike = Number(form.elements.minStrike.value);
     if (!probe && !(minStrike > 0)) { status.textContent = 'Enter your lowest willing sale price before loading the chain.'; form.elements.minStrike.focus(); return; }
     button.disabled = true;
@@ -89,14 +91,26 @@
       const query = probe ? new URLSearchParams({probe:'1'}) : new URLSearchParams({ minDte: form.elements.minDte.value || '7', maxDte: form.elements.maxDte.value || '45', minStrike: String(minStrike || 0) });
       const response = await fetch(`/api/options/mstr?${query}`);
       const data = await response.json();
-      if (!response.ok || data.status !== 'ok') throw new Error(data.error || `Feed returned HTTP ${response.status}`);
-      if (probe) { status.textContent = `${data.provider} automatic data is ready${data.delayed ? ' (15-minute delayed sandbox)' : ' (real-time entitlement)'}. Enter your sale-price floor, then load the chain.`; return; }
+      if (!response.ok || data.status !== 'ok') {
+        connect.hidden = !data.connectUrl;
+        if (data.connectUrl) connect.href = data.connectUrl;
+        disconnect.hidden = true;
+        throw new Error(data.error || `Feed returned HTTP ${response.status}`);
+      }
+      connect.hidden = true;
+      disconnect.hidden = data.provider !== 'Schwab';
+      if (probe) {
+        root.querySelector('.pill').textContent = data.provider === 'Schwab' ? 'SCHWAB CONNECTED' : 'AUTOMATIC DATA';
+        root.querySelector('.pill').className = 'pill ok';
+        status.textContent = `${data.provider} automatic market data is ready${data.delayed ? ' (15-minute delayed sandbox)' : ''}. Enter your sale-price floor, then load the chain.`;
+        return;
+      }
       const selected = (data.calls || []).filter(c => c.strike >= minStrike).slice(0, 30);
       if (!selected.length) throw new Error('No standard MSTR calls matched that strike and expiration range.');
       rows.replaceChildren();
       selected.forEach(c => addRow({expiration:c.expiration,strike:c.strike,bid:c.bid,ask:c.ask,oi:c.oi}));
       if (data.underlying?.price > 0) form.elements.spot.value = data.underlying.price;
-      form.elements.source.value = `${data.provider}${data.delayed ? ' sandbox (15-minute delayed)' : ' brokerage API'}`;
+      form.elements.source.value = `${data.provider}${data.delayed ? ' sandbox (15-minute delayed)' : ' market-data API'}`;
       const quoteTimes = [data.underlying?.quoteAsOf, ...selected.map(c => c.quoteAsOf)].filter(Boolean).map(Date.parse).filter(Number.isFinite);
       form.elements.asOf.value = quoteTimes.length ? localDateTime(new Date(Math.min(...quoteTimes)).toISOString()) : '';
       status.textContent = `Loaded ${selected.length} standard calls across ${data.expirations.length} expiration(s). Retrieved ${new Date(data.retrievedAt).toLocaleString()}. Review every quote before checking.`;

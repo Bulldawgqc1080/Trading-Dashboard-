@@ -5,7 +5,8 @@
 .desk-fields label{display:flex;flex-direction:column;gap:8px;font-size:12px;color:var(--text2)}
 #optionsDesk input{width:100%;min-width:0;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font:inherit;color-scheme:dark}
 #optionsDesk input:focus-visible,#optionsDesk button:focus-visible,#optionsDesk summary:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
-#optionsDesk button{padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg4);color:var(--text);font:inherit;cursor:pointer}
+#optionsDesk button,.desk-connect{padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg4);color:var(--text);font:inherit;cursor:pointer;text-decoration:none}
+#optionsDesk .desk-connect{color:var(--blue)}#optionsDesk .desk-connect[hidden]{display:none}
 #optionsDesk button:disabled{opacity:.45;cursor:not-allowed}#optionsDesk .desk-primary{color:var(--bg);background:var(--blue);font-weight:700}
 .desk-check{display:flex;gap:10px;align-items:flex-start;line-height:1.6;margin:16px 0}.desk-check input{width:18px!important;flex-shrink:0;margin-top:3px}
 .desk-table-wrap{max-width:100%;overflow-x:auto;margin:14px 0}.desk-table{width:100%;border-collapse:collapse;font-size:12px;text-align:left}
