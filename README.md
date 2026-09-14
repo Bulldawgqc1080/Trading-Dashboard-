@@ -19,6 +19,15 @@ Run locally:
 npm test
 ```
 
+## MSTR covered-call desk
+
+The dashboard includes a deterministic, paper-only covered-call comparison for MSTR. Manual broker quotes always work as a fallback. To enable the automatic Tradier chain on Vercel, configure server-side environment variables (never expose the token through `public/` or commit it):
+
+- `TRADIER_TOKEN`: Tradier live or sandbox API token
+- `TRADIER_SANDBOX=true`: optional; uses delayed sandbox market data
+
+The app reads market data only. It contains no order-placement endpoint.
+
 ## Project structure
 ```text
 api/server.js

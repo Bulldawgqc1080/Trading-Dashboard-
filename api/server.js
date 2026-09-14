@@ -11,6 +11,7 @@ const { buildStockVerdict, buildWatchlistSignal } = require('../lib/scoring/watc
 const { getFeedQuality, buildSystemStatus } = require('../lib/health');
 const { loadJournal, logJournalEntry, getJournal } = require('../lib/journal/store');
 const { backfillJournalOutcomes, buildBacktestSummary } = require('../lib/journal/backtest');
+const { buildMstrChain } = require('../lib/options/tradier');
 
 let marketCache = { data: null, ts: 0, spyHistory: null };
 let watchlistCache = { data: null, ts: 0, marketDecision: null };
@@ -28,6 +29,26 @@ function httpsGet(reqUrl) {
     });
     req.on('error', reject);
     req.setTimeout(10000, () => { req.destroy(); reject(new Error('Timeout')); });
+  });
+}
+
+function tradierGet(pathname, params) {
+  const token = process.env.TRADIER_TOKEN;
+  if (!token) throw new Error('TRADIER_TOKEN is not configured');
+  const sandbox = process.env.TRADIER_SANDBOX === 'true';
+  const reqUrl = new URL(`/v1${pathname}`, sandbox ? 'https://sandbox.tradier.com' : 'https://api.tradier.com');
+  for (const [key, value] of Object.entries(params || {})) reqUrl.searchParams.set(key, value);
+  return new Promise((resolve, reject) => {
+    const req = https.get(reqUrl, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } }, res => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) return reject(new Error(`Tradier returned HTTP ${res.statusCode}`));
+        try { resolve(JSON.parse(data)); } catch { reject(new Error('Tradier returned invalid JSON')); }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(12000, () => { req.destroy(); reject(new Error('Tradier request timed out')); });
   });
 }
 
@@ -264,6 +285,27 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
   const parsed = url.parse(req.url, true);
+  if (parsed.pathname === '/api/options/mstr') {
+    if (!process.env.TRADIER_TOKEN) {
+      res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, max-age=0' });
+      res.end(JSON.stringify({ status: 'manual', error: 'Automatic options data is not configured. Use manual broker quotes.' }));
+      return;
+    }
+    if (parsed.query.probe === '1') {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store, max-age=0' });
+      res.end(JSON.stringify({ status: 'ok', provider: 'Tradier', delayed: process.env.TRADIER_SANDBOX === 'true', configured: true }));
+      return;
+    }
+    try {
+      const data = await buildMstrChain({ request: tradierGet, minDte: parsed.query.minDte, maxDte: parsed.query.maxDte, minStrike: parsed.query.minStrike });
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store, max-age=0' });
+      res.end(JSON.stringify({ status: 'ok', provider: 'Tradier', delayed: process.env.TRADIER_SANDBOX === 'true', retrievedAt: new Date().toISOString(), ...data }));
+    } catch (err) {
+      res.writeHead(502, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, max-age=0' });
+      res.end(JSON.stringify({ status: 'unavailable', error: err.message }));
+    }
+    return;
+  }
   if (parsed.pathname === '/api/market') {
     try {
       const data = await getMarketPayload();
