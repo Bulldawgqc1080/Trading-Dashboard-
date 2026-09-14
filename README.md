@@ -28,6 +28,14 @@ The dashboard includes a deterministic, paper-only covered-call comparison for M
 
 The app reads market data only. It contains no order-placement endpoint.
 
+## Schwab market-data migration
+
+The registered OAuth callback URL is:
+
+`https://trading-dashboard-chi-vert.vercel.app/api/schwab/callback`
+
+The Schwab application should request only the Market Data Production product. The callback is intentionally a no-store placeholder until the App Key and App Secret are configured through protected Vercel environment variables. Never commit or place those values in browser code.
+
 ## Project structure
 ```text
 api/server.js

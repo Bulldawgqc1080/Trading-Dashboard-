@@ -285,6 +285,24 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
   const parsed = url.parse(req.url, true);
+  if (parsed.pathname === '/api/schwab/callback') {
+    res.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store, max-age=0',
+      'Referrer-Policy': 'no-referrer',
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"
+    });
+    res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Schwab callback ready</title><body style="font:16px system-ui;background:#07111a;color:#d5e4f0;padding:40px;max-width:720px;margin:auto"><h1 style="color:#59d0ff">Schwab callback is ready</h1><p>This URL is registered for the SIBT read-only market-data connection.</p><p>No authorization code or account data is displayed or stored on this page.</p></body></html>`);
+    return;
+  }
+
+  if (parsed.pathname === '/api/schwab/status') {
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, max-age=0' });
+    res.end(JSON.stringify({ status: 'awaiting_app_approval', marketDataOnly: true, orderPlacement: false }));
+    return;
+  }
+
   if (parsed.pathname === '/api/options/mstr') {
     if (!process.env.TRADIER_TOKEN) {
       res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, max-age=0' });
