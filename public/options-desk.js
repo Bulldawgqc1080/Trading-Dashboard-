@@ -2,6 +2,7 @@
   'use strict';
   const root = document.getElementById('optionsDesk');
   const key = 'sibt.mstr.paper.v1';
+  const positionKey = 'sibt.mstr.position.v1';
   const esc = x => String(x ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const money = x => Number.isFinite(x) ? x.toLocaleString('en-US', {style:'currency',currency:'USD'}) : '—';
   let journal = [], storageError = '';
@@ -28,6 +29,7 @@
     <form id="ccForm">
       <div class="desk-fields">${fields.map(([id,label,type,value,step,min]) => `<label>${label}<input name="${id}" type="${type}" value="${value}" ${step ? `step="${step}" min="${min}"` : ''} ${type === 'text' ? 'maxlength="120"' : ''} required></label>`).join('')}</div>
       <p class="desk-note">Defaults are editable screening settings, not a recommendation. Quote time uses your device’s timezone; days to expiration use the New York calendar. Use the oldest timestamp across the stock and all option bids/asks.</p>
+      <label class="desk-check"><input type="checkbox" name="rememberPosition"> Remember my holdings and screening rules in this browser only. Live quotes and option rows are never saved.</label>
       <label class="desk-check"><input type="checkbox" name="standard" required> I checked that every row is an MSTR call delivering exactly 100 MSTR shares—not an adjusted contract.</label>
       <div class="desk-table-wrap"><table class="desk-table"><caption>Broker call quotes · premiums in dollars per share</caption><thead><tr><th>Expiration</th><th>Strike ($)</th><th>Bid ($)</th><th>Ask ($)</th><th>Open interest</th><th></th></tr></thead><tbody id="ccRows"></tbody></table></div>
       <div class="desk-actions"><button type="button" id="ccLoad">Load MSTR chain</button><button type="button" id="ccAdd">+ Add call manually</button><button type="submit" class="desk-primary">Check my calls</button></div><div id="ccFeed" class="desk-note" role="status">Checking whether automatic Tradier data is configured…</div>
@@ -35,11 +37,28 @@
     <div id="ccResults" aria-live="polite"><p class="desk-note">Add your holdings and at least one broker quote to start. Nothing is prefilled with assumed market prices.</p></div>
     <details class="desk-details"><summary>How the math works—and what it leaves out</summary><p>One standard call covers 100 shares. Calculations cover only the requested contracts; any remaining shares are excluded. Net premium = bid × 100 × contracts − opening fees. The strike itself must meet your sale-price floor: premium does not override it.</p><p>At expiration, covered-share value is capped at the strike. Scenario P&amp;L = (min(stock price, strike) − starting stock price) × covered shares + net premium. Stock can fall to zero. “Since cost basis” uses your entered average cost, not tax-lot accounting.</p><p>These are mechanical comparisons, not price forecasts or buy/sell advice. Early assignment is possible. Earnings, dividends, taxes, corporate actions, and assignment fees are not modeled. Verify broker option approval and account eligibility. A covered call gives up upside above the strike; a passing filter does not mean it is a good trade.</p><p><a href="https://www.optionseducation.org/strategies/all-strategies/covered-call-buy-write" target="_blank" rel="noopener noreferrer">Covered-call mechanics — Options Industry Council</a></p></details>
     <div class="desk-journal-heading"><h3>MSTR paper journal</h3><button type="button" id="ccExport">Export journal</button></div>
-    <p class="desk-note">Entries stay in this browser only—not in the public repository or on a server. They do not sync across devices. Open paper calls reserve shares in this desk. Holdings and quotes are not saved unless you explicitly log a paper entry.</p>
+    <p class="desk-note">Entries stay in this browser only—not in the public repository or on a server. They do not sync across devices. Open paper calls reserve shares in this desk. Holdings and rules are saved only when “Remember” is checked; live quotes and option rows are never saved.</p>
     <div id="ccStorage" role="status"></div><div id="ccJournal"></div>`;
   const form = document.getElementById('ccForm');
   const rows = document.getElementById('ccRows');
   let lastResult = null;
+  const savedFieldNames = ['shares','cost','reserved','contracts','minStrike','source','minDte','maxDte','maxSpread','minOi','minPremium','fee'];
+  function restorePosition() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(positionKey) || 'null');
+      if (!saved || typeof saved !== 'object') return;
+      for (const name of savedFieldNames) if (saved[name] != null && form.elements[name]) form.elements[name].value = saved[name];
+      form.elements.rememberPosition.checked = true;
+    } catch { storageError = 'Saved position could not be read. Re-enter it and export any paper journal you need.'; }
+  }
+  function persistPosition() {
+    try {
+      if (!form.elements.rememberPosition.checked) { localStorage.removeItem(positionKey); return; }
+      const saved = Object.fromEntries(savedFieldNames.map(name => [name, form.elements[name].value]));
+      localStorage.setItem(positionKey, JSON.stringify(saved));
+    } catch { storageError = 'Position settings could not be saved in this browser.'; }
+  }
+  restorePosition();
   function addRow(values = {}) {
     if (rows.children.length >= 30) return;
     const tr = document.createElement('tr');
@@ -52,7 +71,7 @@
     lastResult = null;
     document.getElementById('ccResults').textContent = 'Inputs changed. Check your calls to refresh the comparison.';
   }
-  form.addEventListener('input', invalidate);
+  form.addEventListener('input', () => { persistPosition(); invalidate(); renderJournal(); });
   document.getElementById('ccAdd').addEventListener('click', addRow);
   function localDateTime(iso) {
     const d = new Date(iso);
