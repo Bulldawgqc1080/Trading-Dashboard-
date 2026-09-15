@@ -2,7 +2,10 @@ const API_URL = '/api/market';
 const WATCHLIST_URL = '/api/watchlist';
 const BACKTEST_URL = '/api/backtest';
 const JOURNAL_URL = '/api/journal';
+const WATCHLIST_STORAGE_KEY = 'sibt.watchlist.symbols.v1';
+const DEFAULT_WATCHLIST = ['TSLA', 'NVDA', 'PYPL', 'MSTR', 'HD'];
 
+function esc(value){return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]))}
 function quoteStamp(value){return value && !isNaN(Date.parse(value)) ? new Date(value).toLocaleString('en-US', { timeZone: 'America/New_York', timeZoneName: 'short' }) : 'unavailable'}
 function scoreColor(s){return s>=70?'var(--green)':s>=45?'var(--amber)':'var(--red)'}
 function scoreTone(s){return s>=70?'good':s>=45?'warn':'bad'}
@@ -75,16 +78,58 @@ function renderMarket(data) {
   const warnings = data.validationWarnings || [];
   document.getElementById('modelTrust').innerHTML = `<div class="kv"><span>Input confidence</span><span class="trust-label ${trustTone(data.confidenceScore)}">${data.confidenceLabel} (${data.confidenceScore})</span></div><div class="kv"><span>Model version</span><span class="subtle">${data.modelVersion || '—'}</span></div><div class="kv"><span>Warnings</span><span class="subtle">${warnings.length}</span></div><div class="trust-list">${warnings.length ? warnings.map(w => pill(w, 'warn')).join('') : pill('no active trust warnings', 'good')}</div><div class="trust-note">Rule-based input-quality score, not probability of profit or forecast accuracy. Starts at 100 and deducts for proxies, missing inputs, closed markets and feed issues. Deductions: ${(data.confidenceReasons || []).join('; ') || 'none'}. Predictive validation is shown separately below.</div>`;
   const m = data.market || {};
-  document.getElementById('snapshot').innerHTML = `<div class="kv"><span>SPY</span><span>${m.spy?.price ?? '—'} (${m.spy?.chg ?? '—'}%)</span></div><div class="kv"><span>QQQ</span><span>${m.qqq?.price ?? '—'} (${m.qqq?.chg ?? '—'}%)</span></div><div class="kv"><span>VIX</span><span>${m.vix?.price ?? '—'}</span></div><div class="kv"><span>DXY</span><span>${m.dxy?.price ?? '—'}</span></div><div class="kv"><span>10Y</span><span>${m.tnx?.price ?? '—'}</span></div>`;
+  const events = data.scheduledEvents || {};
+  const nearest = events.nearest;
+  const eventText = nearest ? `${nearest.label} · ${new Date(nearest.at).toLocaleString('en-US', {timeZone:'America/New_York',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'})}` : 'None in published coverage';
+  document.getElementById('snapshot').innerHTML = `<div class="kv"><span>SPY</span><span>${m.spy?.price ?? '—'} (${m.spy?.chg ?? '—'}%)</span></div><div class="kv"><span>QQQ</span><span>${m.qqq?.price ?? '—'} (${m.qqq?.chg ?? '—'}%)</span></div><div class="kv"><span>VIX</span><span>${m.vix?.price ?? '—'}</span></div><div class="kv"><span>DXY</span><span>${m.dxy?.price ?? '—'}</span></div><div class="kv"><span>10Y</span><span>${m.tnx?.price ?? '—'}</span></div><div class="market-event ${events.highImpact24hr || events.fomc72hr ? 'near' : ''}"><div class="metric-label">NEXT HIGH-IMPACT EVENT</div><strong>${esc(eventText)}</strong><small>Official Fed/BLS calendar · coverage through ${esc(events.coverageThrough || 'unknown')}</small></div>`;
 }
 
 function renderWatchlist(data) {
   const statusEl = document.getElementById('watchlistStatus');
   const grid = document.getElementById('watchlistGrid');
   if (!data || !data.stocks || !data.stocks.length) { statusEl.textContent = 'No watchlist data available.'; grid.innerHTML = ''; return; }
-  statusEl.textContent = data.cached ? 'Watchlist loaded (cached).' : 'Watchlist loaded.';
-  grid.innerHTML = data.stocks.map(s => `<div class="wl-card ${s.verdict}"><div class="wl-row"><div><div class="wl-sym">${s.symbol}</div><div class="wl-price">$${Number(s.price).toFixed(2)} <span style="font-size:11px;color:${s.changePct >= 0 ? 'var(--green)' : 'var(--red)'}">${s.changePct >= 0 ? '+' : ''}${s.changePct.toFixed(2)}%</span></div></div><div class="wl-badge ${s.verdict}">${s.verdict}</div></div><div class="wl-note">${s.signal?.shortReason || '—'}</div><div class="wl-levels"><div class="kv"><span>Setup</span><span style="color:${scoreColor(s.setupScore)}">${s.setupScore}</span></div><div class="kv"><span>Momentum</span><span style="color:${scoreColor(s.momentumScore)}">${s.momentumScore}</span></div><div class="kv"><span>RS vs SPY</span><span>${s.relStrength >= 0 ? '+' : ''}${s.relStrength.toFixed(1)}%</span></div><div class="kv"><span>Support / 20D</span><span>${s.support ?? '—'} / ${s.resistance ?? '—'}</span></div></div><div><div class="wl-section-title">WHY IT SCORES THIS WAY</div><div class="wl-list">${(s.why || []).slice(0,3).map(r => pill(r, '')).join('') || '<span class="muted">—</span>'}</div></div><div><div class="wl-section-title">WHAT NEEDS TO IMPROVE</div><div class="wl-list">${(s.needs || []).map(r => pill(r, 'warn')).join('') || '<span class="muted">—</span>'}</div></div></div>`).join('');
+  statusEl.textContent = `${data.cached ? 'Cached' : 'Fresh'} stock data · Overall market permission: ${(data.marketPermission || 'unknown').replace('_',' ')}`;
+  grid.innerHTML = data.stocks.map(s => `<div class="wl-card ${s.verdict}"><div class="wl-row"><div><div class="wl-sym">${esc(s.symbol)}</div><div class="wl-price">$${Number(s.price).toFixed(2)} <span style="font-size:11px;color:${s.changePct >= 0 ? 'var(--green)' : 'var(--red)'}">${s.changePct >= 0 ? '+' : ''}${s.changePct.toFixed(2)}%</span></div></div><div class="wl-badge ${s.verdict}">${esc(s.verdict)} SETUP</div></div><div class="wl-posture"><span>Entry posture</span><strong class="${s.signal?.level || 'caution'}">${esc(s.signal?.label || 'CAUTION')}</strong><small>${esc(s.signal?.shortReason || '—')}</small></div><div class="wl-levels"><div class="kv"><span>Stock setup</span><span style="color:${scoreColor(s.setupScore)}">${s.setupScore}</span></div><div class="kv"><span>Market permission</span><span>${esc((data.marketPermission || 'unknown').replace('_',' '))}</span></div><div class="kv"><span>Momentum</span><span style="color:${scoreColor(s.momentumScore)}">${s.momentumScore}</span></div><div class="kv"><span>RS vs SPY</span><span>${s.relStrength >= 0 ? '+' : ''}${s.relStrength.toFixed(1)}%</span></div><div class="kv"><span>Support / 20D</span><span>${s.support ?? '—'} / ${s.resistance ?? '—'}</span></div></div><div><div class="wl-section-title">WHY THE STOCK SCORES THIS WAY</div><div class="wl-list">${(s.why || []).slice(0,3).map(r => pill(esc(r), '')).join('') || '<span class="muted">—</span>'}</div></div><div><div class="wl-section-title">WHAT THE STOCK NEEDS</div><div class="wl-list">${(s.needs || []).map(r => pill(esc(r), 'warn')).join('') || '<span class="muted">—</span>'}</div></div><button type="button" class="wl-options" data-options-symbol="${esc(s.symbol)}">Analyze options</button></div>`).join('');
+  grid.querySelectorAll('[data-options-symbol]').forEach(button => button.addEventListener('click', () => {
+    const symbolInput = document.querySelector('#ccForm [name="symbol"]');
+    if (!symbolInput) return;
+    symbolInput.value = button.dataset.optionsSymbol;
+    symbolInput.dispatchEvent(new Event('change', {bubbles:true}));
+    document.getElementById('optionsDesk').scrollIntoView({behavior:'smooth',block:'start'});
+  }));
 }
+
+function readSavedWatchlist() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(WATCHLIST_STORAGE_KEY) || 'null');
+    return Array.isArray(saved) && saved.length ? saved : DEFAULT_WATCHLIST;
+  } catch { return DEFAULT_WATCHLIST; }
+}
+
+function normalizeWatchlistInput(value) {
+  return [...new Set(String(value || '').toUpperCase().split(/[,\s]+/).map(s => s.trim()).filter(s => /^[A-Z][A-Z0-9.-]{0,9}$/.test(s)))].slice(0, 12);
+}
+
+let watchlistSymbols = readSavedWatchlist();
+const watchlistEditor = document.getElementById('watchlistEditor');
+watchlistEditor.elements.symbols.value = watchlistSymbols.join(', ');
+watchlistEditor.addEventListener('submit', async event => {
+  event.preventDefault();
+  const next = normalizeWatchlistInput(watchlistEditor.elements.symbols.value);
+  if (!next.length) { document.getElementById('watchlistStatus').textContent = 'Enter at least one valid ticker.'; return; }
+  watchlistSymbols = next;
+  localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(next));
+  watchlistEditor.elements.symbols.value = next.join(', ');
+  document.getElementById('watchlistStatus').textContent = 'Updating watchlist…';
+  try { renderWatchlist(await loadJson(`${WATCHLIST_URL}?symbols=${encodeURIComponent(next.join(','))}`)); }
+  catch (err) { document.getElementById('watchlistStatus').textContent = `Watchlist failed: ${err.message}`; }
+});
+document.getElementById('watchlistReset').addEventListener('click', () => {
+  watchlistSymbols = [...DEFAULT_WATCHLIST];
+  localStorage.removeItem(WATCHLIST_STORAGE_KEY);
+  watchlistEditor.elements.symbols.value = watchlistSymbols.join(', ');
+  watchlistEditor.requestSubmit();
+});
 
 function renderBacktest(data) {
   const status = document.getElementById('backtestStatus');
@@ -110,7 +155,7 @@ function renderJournal(data) {
 }
 
 async function loadJson(url) {
-  const res = await fetch(`${url}?t=${Date.now()}`, { cache: 'no-store' });
+  const res = await fetch(`${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`, { cache: 'no-store' });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   return data;
@@ -118,7 +163,7 @@ async function loadJson(url) {
 
 async function loadAll() {
   try { const market = await loadJson(API_URL); if (market.status === 'unavailable') renderUnavailable(market); else renderMarket(market); } catch (err) { renderUnavailable({ systemStatus: { reason: err.message } }); }
-  try { renderWatchlist(await loadJson(WATCHLIST_URL)); } catch (err) { document.getElementById('watchlistStatus').textContent = `Watchlist failed: ${err.message}`; }
+  try { renderWatchlist(await loadJson(`${WATCHLIST_URL}?symbols=${encodeURIComponent(watchlistSymbols.join(','))}`)); } catch (err) { document.getElementById('watchlistStatus').textContent = `Watchlist failed: ${err.message}`; }
   try { renderBacktest(await loadJson(BACKTEST_URL)); } catch (err) { document.getElementById('backtestStatus').textContent = `Backtest failed: ${err.message}`; }
   try { renderJournal(await loadJson(JOURNAL_URL)); } catch (err) { document.getElementById('journalStatus').textContent = `Journal failed: ${err.message}`; }
   document.getElementById('footerTime').textContent = new Date().toLocaleString();

@@ -6,12 +6,13 @@ Reliability-first market **permission** dashboard for swing traders.
 ## Core framing
 SIBT is a **market permission tool**, not a directional prediction engine.
 
-## Cleanup pass completed
-Recent cleanup improvements:
-- removed unnecessary `spyHistory` from `/api/market` public payload
-- kept SPY history server-side for watchlist logic only
-- split market cache from watchlist use more cleanly
-- kept behavior the same while trimming payload size
+## Decision layers
+- The market-permission score measures whether broad conditions support new swing risk.
+- Stock setup and momentum scores evaluate each ticker independently.
+- Entry posture combines the stock setup with market permission without rewriting the stock's own score.
+- The browser-local editable watchlist supports up to 12 tickers and links each name to the options desk.
+- Forward validation uses exact trading-date matches. Closed-market snapshots are excluded and performance percentages remain hidden until each decision bucket has at least 10 verified observations.
+- Proxy breadth is excluded from scoring. Published FOMC, CPI, jobs-report, market-holiday, and early-close dates are explicit model inputs.
 
 ## Basic test pass
 Run locally:
@@ -19,9 +20,9 @@ Run locally:
 npm test
 ```
 
-## MSTR covered-call desk
+## Covered-call desk
 
-The dashboard includes a deterministic, paper-only covered-call comparison for MSTR. Manual broker quotes always work as a fallback. To enable the automatic Tradier chain on Vercel, configure server-side environment variables (never expose the token through `public/` or commit it):
+The dashboard includes a deterministic, paper-only covered-call comparison for Schwab-supported optionable U.S. stocks and ETFs. Holdings, screening rules, and paper journals remain browser-only. Manual broker quotes work as a fallback.
 
 - `TRADIER_TOKEN`: Tradier live or sandbox API token
 - `TRADIER_SANDBOX=true`: optional; uses delayed sandbox market data
@@ -34,7 +35,7 @@ The registered OAuth callback URL is:
 
 `https://trading-dashboard-chi-vert.vercel.app/api/schwab/callback`
 
-The Schwab application should request only the Market Data Production product. The callback is intentionally a no-store placeholder until the App Key and App Secret are configured through protected Vercel environment variables. Never commit or place those values in browser code.
+The Schwab application requests only Market Data Production. OAuth tokens are stored in an encrypted HttpOnly cookie; app credentials remain protected Vercel environment variables. The server exposes no account, position, or order endpoint. Never commit or place credential values in browser code.
 
 ## Project structure
 ```text

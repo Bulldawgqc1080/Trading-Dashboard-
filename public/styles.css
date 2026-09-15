@@ -217,6 +217,9 @@ body{display:flex;flex-direction:column}
 .fill{height:100%}
 
 .watchlist-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.watchlist-editor{margin:6px 0 16px;padding:14px;border:1px solid rgba(89,208,255,.10);border-radius:14px;background:rgba(8,17,26,.55)}
+.watchlist-editor label{display:block;margin-bottom:8px;color:var(--text2);font-size:11px}
+.watchlist-editor-row{display:flex;gap:10px;flex-wrap:wrap}.watchlist-editor input{flex:1;min-width:220px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font:inherit}.watchlist-editor button,.wl-options{padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg4);color:var(--text);font:inherit;cursor:pointer}.wl-options{margin-top:auto;color:var(--blue)}
 .wl-card{
   background:linear-gradient(180deg,rgba(15,30,45,.96) 0%,rgba(11,22,34,.98) 100%);
   border:1px solid rgba(89,208,255,.08);
@@ -241,6 +244,8 @@ body{display:flex;flex-direction:column}
   border:1px solid rgba(95,122,142,.18);
   border-radius:12px;
 }
+.wl-posture{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;align-items:center;padding:9px 11px;background:rgba(10,21,32,.9);border:1px solid rgba(95,122,142,.18);border-radius:12px}.wl-posture span{color:var(--text2);font-size:10px;text-transform:uppercase;letter-spacing:1px}.wl-posture strong{justify-self:end}.wl-posture strong.favorable{color:var(--green)}.wl-posture strong.caution{color:var(--amber)}.wl-posture strong.avoid{color:var(--red)}.wl-posture small{grid-column:1/-1;color:var(--text2);line-height:1.5}
+.market-event{margin-top:10px;padding-top:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:5px}.market-event strong{font-size:11px}.market-event small{color:var(--text3);line-height:1.5}.market-event.near strong{color:var(--amber)}
 .wl-badge{font-size:10px;font-weight:700;letter-spacing:1px;padding:5px 10px;border-radius:999px}
 .wl-badge.ACTIONABLE{color:var(--green);background:rgba(0,230,118,.1);border:1px solid rgba(0,230,118,.3)}
 .wl-badge.WATCH{color:var(--amber);background:rgba(255,179,71,.1);border:1px solid rgba(255,179,71,.3)}
