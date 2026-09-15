@@ -51,6 +51,7 @@
     if (number(p.contracts) > capacity) errors.push(`Only ${capacity} covered contract(s) available. Never sell uncovered calls here.`);
     if (p.standard !== true) errors.push('Confirm these are standard calls delivering 100 shares each, not adjusted contracts.');
     if (!String(p.source || '').trim()) errors.push('Name the broker or source of the quotes.');
+    if (String(p.marketStatus || '').toUpperCase() !== 'MARKET OPEN') errors.push(`Market status is ${String(p.marketStatus || 'UNKNOWN').toUpperCase()}. Closed-market and unknown-status quotes are planning-only.`);
     const eventDate = String(p.eventDate || '').trim();
     const eventTime = eventDate ? dateOnly(eventDate) : NaN;
     if (eventDate && !Number.isFinite(eventTime)) errors.push('Known earnings/company-event date must be a valid calendar date.');

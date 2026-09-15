@@ -53,6 +53,7 @@
     if (number(p.committedCash) > number(p.cash)) errors.push('Committed cash exceeds available cash.');
     if (p.standard !== true) errors.push('Confirm these are standard puts representing 100 shares each, not adjusted contracts.');
     if (!String(p.source || '').trim()) errors.push('Name the broker or source of the quotes.');
+    if (String(p.marketStatus || '').toUpperCase() !== 'MARKET OPEN') errors.push(`Market status is ${String(p.marketStatus || 'UNKNOWN').toUpperCase()}. Closed-market and unknown-status quotes are planning-only.`);
     const entryLabel = String(p.entryLabel || 'UNKNOWN').toUpperCase();
     if (p.requireEligible === true && !['FAVORABLE','CAUTION'].includes(entryLabel)) errors.push(`Stock entry posture is ${entryLabel}; this desk requires FAVORABLE or CAUTION unless you deliberately override it.`);
     const eventDate = String(p.eventDate || '').trim();

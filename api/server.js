@@ -285,6 +285,12 @@ const server = http.createServer(async (req, res) => {
 
   const requestUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const parsed = { pathname: requestUrl.pathname, query: Object.fromEntries(requestUrl.searchParams) };
+  if (parsed.pathname === '/api/market-status') {
+    const marketStatus = getMarketStatus();
+    res.writeHead(200, { 'Content-Type':'application/json', 'Cache-Control':'no-store, max-age=0' });
+    res.end(JSON.stringify({ status:'ok', ...marketStatus, retrievedAt:new Date().toISOString() }));
+    return;
+  }
   if (parsed.pathname === '/api/schwab/login') {
     try {
       const auth = schwabOauth.startAuthorization();

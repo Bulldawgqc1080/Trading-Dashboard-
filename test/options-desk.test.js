@@ -3,7 +3,7 @@ const { evaluate, rankCandidates, closePaper } = require('../public/covered-call
 const { buildMstrChain, normalizeOption } = require('../lib/options/tradier');
 const { getEarningsRisk, parseNasdaqEarnings } = require('../lib/events/nasdaq');
 
-const position = { shares: 200, reserved: 0, contracts: 1, cost: 110, spot: 140, minStrike: 150, source: 'paper broker', asOf: '2026-09-14T14:00:00Z', minDte: 7, maxDte: 45, maxSpread: 20, minOi: 100, minPremium: 100, fee: 1, standard: true };
+const position = { shares: 200, reserved: 0, contracts: 1, cost: 110, spot: 140, minStrike: 150, source: 'paper broker', asOf: '2026-09-14T14:00:00Z', marketStatus:'MARKET OPEN', minDte: 7, maxDte: 45, maxSpread: 20, minOi: 100, minPremium: 100, fee: 1, standard: true };
 const calls = [{ expiration: '2026-10-02', strike: 150, bid: 5, ask: 5.5, oi: 1000 }];
 const result = evaluate(position, calls, Date.parse('2026-09-14T14:10:00Z'));
 assert.equal(result.eligibleCount, 1);
@@ -13,6 +13,7 @@ assert.equal(result.rows[0].metrics.maxPnlCost, 4499);
 assert.equal(result.rows[0].metrics.scenarios.find(x => x.price === 168).difference, -1301);
 assert.equal(evaluate({...position, shares:99}, calls, Date.parse('2026-09-14T14:10:00Z')).eligibleCount, 0);
 assert.equal(evaluate(position, calls, Date.parse('2026-09-14T14:21:00Z')).eligibleCount, 0);
+assert.equal(evaluate({...position,marketStatus:'AFTER-HOURS',asOf:'2026-09-14T14:09:00Z'},calls,Date.parse('2026-09-14T14:10:00Z')).eligibleCount,0);
 assert.equal(evaluate(position, [{...calls[0], quoteAsOf:'2026-09-14T13:00:00Z'}], Date.parse('2026-09-14T14:10:00Z')).eligibleCount, 0);
 assert.equal(evaluate(position, [{...calls[0], quoteAsOf:'2026-09-14T14:05:00Z'}], Date.parse('2026-09-14T14:10:00Z')).eligibleCount, 1);
 const rankedInput = [

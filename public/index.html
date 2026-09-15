@@ -6,15 +6,14 @@
   <meta name="description" content="SIBT — reliability-first market environment dashboard for swing traders.">
   <title>SIBT — Should I Be Trading?</title>
   <link rel="stylesheet" href="/styles.css?v=8">
-  <link rel="stylesheet" href="/options-desk.css?v=3">
+  <link rel="stylesheet" href="/options-desk.css?v=4">
 </head>
 <body>
   <header class="topbar">
     <div class="brand-lockup">
       <div class="logo">SIBT</div>
       <div class="brand-subtitle">Should I Be Trading?</div>
-      <a class="desk-nav" href="#optionsDesk">Calls ↓</a>
-      <a class="desk-nav" href="#putDesk">Puts ↓</a>
+      <div class="desk-nav-group"><a class="desk-nav" href="#optionsDesk" data-strategy-link="call">Calls ↓</a><a class="desk-nav" href="#putDesk" data-strategy-link="put">Puts ↓</a></div>
     </div>
   </header>
 
@@ -114,6 +113,8 @@
       <div id="watchlistGrid" class="watchlist-grid"></div>
     </section>
 
+    <div id="strategyTabs" class="strategy-tabs" role="tablist" aria-label="Options strategy"><button type="button" role="tab" data-strategy="call">Covered calls</button><button type="button" role="tab" data-strategy="put">Cash-secured puts</button></div>
+
     <section id="optionsDesk" class="card section-card" aria-label="Covered-call trade sheet"></section>
 
     <section id="putDesk" class="card section-card" aria-label="Cash-secured-put trade sheet"></section>
@@ -147,10 +148,11 @@
     <span>SIBT — reliability-first build</span>
     <span id="footerTime"></span>
   </footer>
-  <script src="/app.js?v=8"></script>
-  <script src="/covered-call.js?v=5"></script>
-  <script src="/cash-secured-put.js?v=1"></script>
-  <script src="/options-desk.js?v=7"></script>
-  <script src="/cash-secured-put-desk.js?v=1"></script>
+  <script src="/app.js?v=10"></script>
+  <script src="/options-common.js?v=1"></script>
+  <script src="/covered-call.js?v=6"></script>
+  <script src="/cash-secured-put.js?v=3"></script>
+  <script src="/options-desk.js?v=9"></script>
+  <script src="/cash-secured-put-desk.js?v=3"></script>
 </body>
 </html>

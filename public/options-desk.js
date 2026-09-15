@@ -21,6 +21,9 @@
   } catch { storageError = 'Browser storage unavailable or unreadable. Export your journal before leaving.'; }
   let activeSymbol = validTicker(localStorage.getItem(lastSymbolKey)) ? ticker(localStorage.getItem(lastSymbolKey)) : 'MSTR';
   let eventState = { status:'unknown', date:null, estimated:false, source:'', note:'Load the option chain to check the earnings calendar.' };
+  let marketState = { label:'UNKNOWN', open:false };
+  let syncingSymbol = false;
+  let wheelSeed = null;
   const fields = [
     ['symbol','Ticker','text',activeSymbol,'',''],
     ['shares','Shares owned','number','','1','0'],
@@ -38,11 +41,14 @@
     ['minPremium','Minimum total net premium ($)','number','0','0.01','0'],
     ['fee','Opening fee / contract ($)','number','0.65','0.01','0']
   ];
+  const fieldMarkup = ([id,label,type,value,step,min]) => `<label>${label}<input name="${id}" type="${type}" value="${value}" ${step ? `step="${step}" min="${min}"` : ''} ${type === 'text' ? 'maxlength="120"' : ''} required></label>`;
   root.innerHTML = `
     <div class="section-heading"><div><div class="metric-label"><span data-active-symbol>${activeSymbol}</span> · COVERED-CALL DESK</div><h2>Your shares. Your sale price. Your rules.</h2><p class="section-copy">Compare calls against holding your shares. Paper planning only—no brokerage orders.</p></div><span class="pill warn">MANUAL QUOTES</span></div>
     <p class="desk-note">Load automatic Schwab market data or enter stock and call quotes from the same broker snapshot. A bid is an estimate, not a guaranteed fill. Quotes over 20 minutes old cannot qualify.</p>
+    <div id="ccMarketStatus" class="banner warn"><strong>Market status: UNKNOWN</strong><p>Checking exchange hours. Unknown and closed-market quotes are planning-only.</p></div>
     <form id="ccForm">
-      <div class="desk-fields">${fields.map(([id,label,type,value,step,min]) => `<label>${label}<input name="${id}" type="${type}" value="${value}" ${step ? `step="${step}" min="${min}"` : ''} ${type === 'text' ? 'maxlength="120"' : ''} required></label>`).join('')}</div>
+      <div class="desk-fields">${fields.slice(0,8).map(fieldMarkup).join('')}</div>
+      <details class="desk-details desk-advanced"><summary>Advanced filters</summary><div class="desk-fields">${fields.slice(8).map(fieldMarkup).join('')}</div></details>
       <section class="subcard desk-event"><div><div class="metric-label">SCHEDULED EVENT RISK</div><strong id="ccEventStatus">Not checked</strong><p id="ccEventNote" class="desk-note">Load the option chain to check the earnings calendar.</p></div><label>Manual earnings/company-event date override<input name="manualEventDate" type="date"><small>Optional. Browser-only when holdings are remembered.</small></label></section>
       <label class="desk-check"><input type="checkbox" name="avoidEvent" checked> Exclude calls expiring on or after the known earnings/company-event date. If unchecked, crossing calls remain eligible but lose 25 ranking points.</label>
       <p class="desk-note">Defaults are editable screening settings, not a recommendation. Quote time uses your device’s timezone; days to expiration use the New York calendar. Automatic contracts use their own timestamps; manual rows use the entered stock/option snapshot time.</p>
@@ -53,9 +59,7 @@
     </form>
     <div id="ccResults" aria-live="polite"><p class="desk-note">Add your holdings and at least one broker quote to start. Nothing is prefilled with assumed market prices.</p></div>
     <details class="desk-details"><summary>How the math works—and what it leaves out</summary><p>One standard call covers 100 shares. Calculations cover only the requested contracts; any remaining shares are excluded. Net premium = bid × 100 × contracts − opening fees. The strike itself must meet your sale-price floor: premium does not override it.</p><p>At expiration, covered-share value is capped at the strike. Scenario P&amp;L = (min(stock price, strike) − starting stock price) × covered shares + net premium. Stock can fall to zero. “Since cost basis” uses your entered average cost, not tax-lot accounting.</p><p>Known earnings dates can be excluded or penalized, but dates may be estimated or revised. Unscheduled news cannot be predicted. Dividends, taxes, corporate actions, and assignment fees are not modeled. Verify broker option approval and account eligibility. A covered call gives up upside above the strike; a passing filter does not mean it is a good trade.</p><p><a href="https://www.optionseducation.org/strategies/all-strategies/covered-call-buy-write" target="_blank" rel="noopener noreferrer">Covered-call mechanics — Options Industry Council</a></p></details>
-    <div class="desk-journal-heading"><h3><span data-active-symbol>${activeSymbol}</span> paper journal</h3><button type="button" id="ccExport">Export journal</button></div>
-    <p class="desk-note">Entries stay in this browser only—not in the public repository or on a server. They do not sync across devices. Open paper calls reserve shares in this desk. Holdings and rules are saved only when “Remember” is checked; live quotes and option rows are never saved.</p>
-    <div id="ccStorage" role="status"></div><div id="ccJournal"></div>`;
+    <details class="desk-details desk-journal"><summary><span data-active-symbol>${activeSymbol}</span> paper journal</summary><div class="desk-journal-heading"><p class="desk-note">Entries stay in this browser only. Open paper calls reserve shares. Closed entries can be undone for correction.</p><button type="button" id="ccExport">Export journal</button></div><div id="ccStorage" role="status"></div><div id="ccJournal"></div></details>`;
   const form = document.getElementById('ccForm');
   const rows = document.getElementById('ccRows');
   let lastResult = null;
@@ -80,6 +84,16 @@
       status.textContent = eventState.status === 'unavailable' ? 'Calendar unavailable' : 'No estimate returned';
       note.textContent = `${eventState.note || 'No known date.'} Unknown does not mean event-free.`;
     }
+  }
+  function renderMarketStatus() {
+    const host=document.getElementById('ccMarketStatus');
+    host.className=`banner ${marketState.open?'ok':'warn'}`;
+    host.innerHTML=`<strong>Market status: ${esc(marketState.label)}</strong><p>${marketState.open?'Regular session is open; freshness rules still apply.':'Planning only. Calls cannot qualify until the regular session is open.'}</p>`;
+  }
+  async function refreshMarketStatus() {
+    try { const response=await fetch('/api/market-status'); const data=await response.json(); marketState={label:data.label||'UNKNOWN',open:data.open===true}; }
+    catch { marketState={label:'UNKNOWN',open:false}; }
+    renderMarketStatus(); if(lastResult) analyze();
   }
   function restorePosition(symbol = activeSymbol) {
     try {
@@ -107,7 +121,7 @@
       localStorage.setItem(positionsKey, JSON.stringify(positions));
     } catch { storageError = 'Position settings could not be saved in this browser.'; }
   }
-  restorePosition(); updateSymbolLabels(); renderEvent();
+  restorePosition(); updateSymbolLabels(); renderEvent(); renderMarketStatus();
   function addRow(values = {}) {
     if (rows.children.length >= 30) return;
     const tr = document.createElement('tr');
@@ -137,7 +151,9 @@
     form.elements.symbol.value = next;
     localStorage.setItem(lastSymbolKey, next);
     restorePosition(next); updateSymbolLabels(); renderEvent(); rows.replaceChildren(); addRow(); renderJournal(); invalidate();
+    if (!syncingSymbol) window.dispatchEvent(new CustomEvent('sibt:symbol-changed',{detail:{symbol:next,source:'call'}}));
   });
+  window.addEventListener('sibt:symbol-changed',event=>{const detail=event.detail||{};if(detail.source==='call'||!validTicker(detail.symbol)||ticker(detail.symbol)===activeSymbol)return;syncingSymbol=true;form.elements.symbol.value=ticker(detail.symbol);form.elements.symbol.dispatchEvent(new Event('change',{bubbles:true}));syncingSymbol=false;});
   document.getElementById('ccAdd').addEventListener('click', addRow);
   function localDateTime(iso) {
     const d = new Date(iso);
@@ -174,7 +190,9 @@
         status.textContent = `${data.provider} automatic market data is ready${data.delayed ? ' (15-minute delayed sandbox)' : ''}. Enter your sale-price floor, then load the chain.`;
         return;
       }
-      const selected = (data.calls || []).filter(c => c.strike >= minStrike).slice(0, 30);
+      marketState={label:data.marketStatus||'UNKNOWN',open:data.marketStatus==='MARKET OPEN'}; renderMarketStatus();
+      const matched=(data.calls||[]).filter(c=>c.strike>=minStrike);
+      const selected=OptionsCommon.sampleAcrossExpirations(matched,{limit:30,spot:data.underlying?.price,strategy:'call'});
       if (!selected.length) throw new Error(`No standard ${symbol} calls matched that strike and expiration range.`);
       rows.replaceChildren();
       selected.forEach(c => addRow({expiration:c.expiration,strike:c.strike,bid:c.bid,ask:c.ask,oi:c.oi,quoteAsOf:c.quoteAsOf,delta:c.delta,iv:c.iv,volume:c.volume}));
@@ -198,6 +216,7 @@
     position.eventDate = position.manualEventDate || eventState.date || '';
     position.eventSource = position.manualEventDate ? 'Manual override' : eventState.source || '';
     position.eventEstimated = !position.manualEventDate && eventState.estimated === true;
+    position.marketStatus = marketState.label;
     position.asOf = position.asOf ? new Date(position.asOf).toISOString() : '';
     position.reserved = position.reserved === '' ? '' : Number(position.reserved) + journal.filter(j => !j.closed && ticker(j.symbol) === position.symbol).reduce((n,j) => n + Number(j.position.contracts) * 100, 0);
     const calls = [...rows.children].map(tr => ({...Object.fromEntries([...tr.querySelectorAll('input')].map(i => [i.dataset.field, i.value])), quoteAsOf: tr.dataset.quoteAsOf || '', delta:tr.dataset.delta === '' ? null : Number(tr.dataset.delta), iv:tr.dataset.iv === '' ? null : Number(tr.dataset.iv), volume:tr.dataset.volume === '' ? null : Number(tr.dataset.volume)}));
@@ -225,7 +244,8 @@
       const fresh = read();
       const candidate = CoveredCall.evaluate(fresh.position, fresh.calls).rows[Number(b.dataset.log)];
       if (!candidate?.eligible) { analyze(); return; }
-      journal.push({id: crypto.randomUUID(), symbol:fresh.position.symbol, openedAt:new Date().toISOString(), position:fresh.position, call:fresh.calls[Number(b.dataset.log)], metrics:candidate.metrics, fillAssumption:'bid; simulated; not an execution'});
+      journal.push({id: crypto.randomUUID(), symbol:fresh.position.symbol, openedAt:new Date().toISOString(), position:fresh.position, call:fresh.calls[Number(b.dataset.log)], metrics:candidate.metrics, wheelOriginPutId:wheelSeed?.putId||null, fillAssumption:'bid; simulated; not an execution'});
+      if(wheelSeed){wheelSeed=null;try{localStorage.removeItem('sibt.options.wheelSeed.v1');}catch{}}
       persist(); renderJournal(); analyze();
     }));
   }
@@ -233,7 +253,7 @@
   // Recheck age rather than leaving a qualifying quote green indefinitely.
   setInterval(() => { if (lastResult) analyze(); }, 30000);
   function persist() {
-    try { localStorage.setItem(key, JSON.stringify(journal)); storageError = ''; }
+    try { localStorage.setItem(key, JSON.stringify(journal)); storageError = ''; window.dispatchEvent(new CustomEvent('sibt:wheel-updated',{detail:{source:'call'}})); }
     catch { storageError = 'Journal could not be saved in this browser. Export it now to keep your entries.'; }
   }
   function renderJournal() {
@@ -241,14 +261,16 @@
     const symbolJournal = journal.filter(j => ticker(j.symbol) === activeSymbol);
     const closed = symbolJournal.filter(j => j.closed);
     const open = symbolJournal.filter(j => !j.closed);
+    let putJournal=[]; try{putJournal=JSON.parse(localStorage.getItem('sibt.puts.paper.v1')||'[]');}catch{}
+    const wheel=OptionsCommon.wheelSummary(journal,Array.isArray(putJournal)?putJournal:[],activeSymbol);
     const panel = document.getElementById('ccJournal');
-    panel.innerHTML = `<p class="desk-note">${open.length} open · ${closed.length} closed · Closed-trade P&amp;L from entry: ${money(closed.reduce((sum,j) => sum + j.closed.result.totalPnl, 0))}. Open positions are unmarked and excluded; this is not total portfolio performance.</p>` + symbolJournal.slice().reverse().map(j => `<article class="subcard desk-candidate"><h4>${esc(j.symbol)} · ${esc(j.call.expiration)} · $${esc(j.call.strike)} call · ${esc(j.position.contracts)} contract(s) · ${j.closed ? j.closed.type === 'assigned' ? 'CALLED AWAY' : 'CLOSED' : 'OPEN (not marked)'}</h4><p class="desk-note">Paper entry ${esc(new Date(j.openedAt).toLocaleString())} · Source ${esc(j.position.source)} · Net entry premium ${money(j.metrics.netPremium)}</p>${j.closed ? `<div class="kv"><span>Stock P&amp;L from entry</span><span>${money(j.closed.result.stockPnl)}</span></div><div class="kv"><span>Option P&amp;L after fees</span><span>${money(j.closed.result.optionPnl)}</span></div><div class="kv"><strong>Combined P&amp;L from entry</strong><strong>${money(j.closed.result.totalPnl)}</strong></div><div class="kv"><span>Hold-only benchmark</span><span>${money(j.closed.result.holdPnl)}</span></div><div class="kv"><span>Combined P&amp;L since cost basis</span><span>${money(j.closed.result.totalPnlCost)}</span></div>` : `<form data-close="${esc(j.id)}" class="desk-close"><p class="desk-note">Simulate closing both legs at the same time. Enter the stock sale price and call buyback ask. Or record assignment when the shares are called away at the strike.</p><div class="desk-fields"><label>${esc(j.symbol)} exit price ($)<input name="stock" type="number" min="0" step="0.01" required></label><label>Call buyback / share ($)<input name="buyback" type="number" min="0" step="0.01" required></label><label>Closing fee / contract ($)<input name="fee" type="number" min="0" step="0.01" value="0.65" required></label></div><button type="submit">Record paper close</button> <button type="button" data-assign-call="${esc(j.id)}">Record called away at strike</button></form>`}</article>`).join('');
+    panel.innerHTML = `<p class="desk-note">${open.length} open · ${closed.length} closed · Closed-trade P&amp;L from entry: ${money(closed.reduce((sum,j) => sum + j.closed.result.totalPnl, 0))}. Completed wheel cycles: ${wheel.completedCycles} · cumulative realized wheel P&amp;L: ${money(wheel.realizedPnl)}. Open positions are unmarked.</p>` + symbolJournal.slice().reverse().map(j => `<article class="subcard desk-candidate"><h4>${esc(j.symbol)} · ${esc(j.call.expiration)} · $${esc(j.call.strike)} call · ${esc(j.position.contracts)} contract(s) · ${j.closed ? j.closed.type === 'assigned' ? 'CALLED AWAY' : 'CLOSED' : 'OPEN (not marked)'}</h4><p class="desk-note">Paper entry ${esc(new Date(j.openedAt).toLocaleString())} · Source ${esc(j.position.source)} · Net entry premium ${money(j.metrics.netPremium)}${j.wheelOriginPutId?' · continued from assigned put':''}</p>${j.closed ? `<div class="kv"><span>Stock P&amp;L from entry</span><span>${money(j.closed.result.stockPnl)}</span></div><div class="kv"><span>Option P&amp;L after fees</span><span>${money(j.closed.result.optionPnl)}</span></div><div class="kv"><strong>Combined P&amp;L from entry</strong><strong>${money(j.closed.result.totalPnl)}</strong></div><div class="kv"><span>Hold-only benchmark</span><span>${money(j.closed.result.holdPnl)}</span></div><div class="kv"><span>Combined P&amp;L since cost basis</span><span>${money(j.closed.result.totalPnlCost)}</span></div><button type="button" data-undo-call="${esc(j.id)}">Undo result</button>` : `<form data-close="${esc(j.id)}" class="desk-close"><p class="desk-note">Simulate closing both legs at the same time. Enter the stock sale price and call buyback ask. Or record assignment when the shares are called away at the strike.</p><div class="desk-fields"><label>${esc(j.symbol)} exit price ($)<input name="stock" type="number" min="0" step="0.01" required></label><label>Call buyback / share ($)<input name="buyback" type="number" min="0" step="0.01" required></label><label>Closing fee / contract ($)<input name="fee" type="number" min="0" step="0.01" value="0.65" required></label></div><button type="submit">Record paper close</button> <button type="button" data-assign-call="${esc(j.id)}">Record called away at strike</button></form>`} <button type="button" data-delete-call="${esc(j.id)}">Delete paper entry</button></article>`).join('');
     panel.querySelectorAll('[data-close]').forEach(f => f.addEventListener('submit', e => {
       e.preventDefault();
       const j = journal.find(x => x.id === f.dataset.close);
       if (!j || j.closed) return;
       const data = Object.fromEntries(new FormData(f));
-      j.closed = {at:new Date().toISOString(), inputs:data, result:CoveredCall.closePaper(j, data.stock, data.buyback, data.fee)};
+      j.closed = {type:'closed',at:new Date().toISOString(), inputs:data, result:CoveredCall.closePaper(j, data.stock, data.buyback, data.fee)};
       persist(); renderJournal(); if (lastResult) analyze();
     }));
     panel.querySelectorAll('[data-assign-call]').forEach(button => button.addEventListener('click', () => {
@@ -257,10 +279,23 @@
       j.closed = { type:'assigned', at:new Date().toISOString(), result:CoveredCall.closePaper(j, j.call.strike, 0, 0) };
       persist(); window.dispatchEvent(new CustomEvent('sibt:call-assigned', {detail:{symbol:j.symbol}})); renderJournal(); if (lastResult) analyze();
     }));
+    panel.querySelectorAll('[data-undo-call]').forEach(button=>button.addEventListener('click',()=>{const j=journal.find(x=>x.id===button.dataset.undoCall);if(!j?.closed)return;if(putJournal.some(put=>put.wheelOriginCallId===j.id)){storageError='Delete the downstream paper put before undoing this call result.';renderJournal();return;}delete j.closed;persist();renderJournal();if(lastResult)analyze();}));
+    panel.querySelectorAll('[data-delete-call]').forEach(button=>button.addEventListener('click',()=>{const index=journal.findIndex(x=>x.id===button.dataset.deleteCall);if(index<0)return;const j=journal[index];if(putJournal.some(put=>put.wheelOriginCallId===j.id)){storageError='Delete the downstream paper put before deleting this call entry.';renderJournal();return;}if(!confirm('Delete this paper call entry?'))return;journal.splice(index,1);persist();renderJournal();if(lastResult)analyze();}));
   }
   document.getElementById('ccExport').addEventListener('click', () => {
     const href = URL.createObjectURL(new Blob([JSON.stringify({version:1,exportedAt:new Date().toISOString(),journal},null,2)], {type:'application/json'}));
     const a = document.createElement('a'); a.href = href; a.download = 'covered-call-paper-journal.json'; a.click(); setTimeout(() => URL.revokeObjectURL(href), 1000);
   });
-  addRow(); renderJournal(); loadChain({probe:true});
+  function applyPutSeed(seed) {
+    if(!seed||!validTicker(seed.symbol)||!Number.isFinite(Number(seed.shares))||!Number.isFinite(Number(seed.effectivePrice)))return;
+    syncingSymbol=true; form.elements.symbol.value=ticker(seed.symbol); form.elements.symbol.dispatchEvent(new Event('change',{bubbles:true})); syncingSymbol=false;
+    wheelSeed=seed; form.elements.shares.value=seed.shares; form.elements.cost.value=Number(seed.effectivePrice).toFixed(2); form.elements.reserved.value='0'; form.elements.contracts.value=Math.max(1,Math.floor(Number(seed.shares)/100)); form.elements.source.value='Paper put assignment';
+    document.getElementById('ccFeed').textContent=`Loaded ${seed.shares} paper-assigned shares at an effective ${money(Number(seed.effectivePrice))} basis. Set your minimum sale price, then load fresh calls.`;
+    persistPosition(); invalidate(); window.dispatchEvent(new CustomEvent('sibt:strategy-select',{detail:{strategy:'call'}})); root.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  window.addEventListener('sibt:put-assigned',event=>applyPutSeed(event.detail));
+  window.addEventListener('sibt:wheel-updated',event=>{if(event.detail?.source!=='call')renderJournal();});
+  addRow();
+  try{wheelSeed=JSON.parse(localStorage.getItem('sibt.options.wheelSeed.v1')||'null');if(wheelSeed)applyPutSeed(wheelSeed);}catch{wheelSeed=null;}
+  renderJournal(); refreshMarketStatus(); loadChain({probe:true}); setInterval(refreshMarketStatus,30000);
 })();

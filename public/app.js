@@ -95,14 +95,14 @@ function renderWatchlist(data) {
     if (!symbolInput) return;
     symbolInput.value = button.dataset.optionsSymbol;
     symbolInput.dispatchEvent(new Event('change', {bubbles:true}));
-    document.getElementById('optionsDesk').scrollIntoView({behavior:'smooth',block:'start'});
+    selectStrategy('call',{scroll:true});
   }));
   grid.querySelectorAll('[data-puts-symbol]').forEach(button => button.addEventListener('click', () => {
     const symbolInput = document.querySelector('#cspForm [name="symbol"]');
     if (!symbolInput) return;
     symbolInput.value = button.dataset.putsSymbol;
     symbolInput.dispatchEvent(new Event('change', {bubbles:true}));
-    document.getElementById('putDesk').scrollIntoView({behavior:'smooth',block:'start'});
+    selectStrategy('put',{scroll:true});
   }));
 }
 
@@ -175,6 +175,21 @@ async function loadAll() {
   try { renderJournal(await loadJson(JOURNAL_URL)); } catch (err) { document.getElementById('journalStatus').textContent = `Journal failed: ${err.message}`; }
   document.getElementById('footerTime').textContent = new Date().toLocaleString();
 }
+
+const strategyKey='sibt.options.activeStrategy.v1';
+function selectStrategy(strategy,{scroll=false}={}) {
+  strategy=strategy==='put'?'put':'call';
+  const call=document.getElementById('optionsDesk'),put=document.getElementById('putDesk');
+  call.hidden=strategy!=='call'; put.hidden=strategy!=='put';
+  document.querySelectorAll('[data-strategy]').forEach(button=>{const active=button.dataset.strategy===strategy;button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active));});
+  try{localStorage.setItem(strategyKey,strategy);}catch{}
+  if(scroll)(strategy==='put'?put:call).scrollIntoView({behavior:'smooth',block:'start'});
+}
+let initialStrategy=location.hash==='#putDesk'?'put':location.hash==='#optionsDesk'?'call':localStorage.getItem(strategyKey)||'call';
+selectStrategy(initialStrategy);
+document.querySelectorAll('[data-strategy]').forEach(button=>button.addEventListener('click',()=>selectStrategy(button.dataset.strategy)));
+document.querySelectorAll('[data-strategy-link]').forEach(link=>link.addEventListener('click',event=>{event.preventDefault();selectStrategy(link.dataset.strategy,{scroll:true});history.replaceState(null,'',link.getAttribute('href'));}));
+window.addEventListener('sibt:strategy-select',event=>selectStrategy(event.detail?.strategy,{scroll:true}));
 
 loadAll();
 setInterval(loadAll, 45000);
