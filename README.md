@@ -29,6 +29,10 @@ The dashboard includes a deterministic, paper-only covered-call comparison for S
 
 The app reads market data only. It contains no order-placement endpoint.
 
+## Cash-secured-put desk
+
+The put desk screens standard 100-share puts using full cash coverage, a hard maximum purchase strike, quote freshness, liquidity, premium, expiration, scheduled-event risk, and the dashboard's stock-entry posture. It ranks only surviving contracts with disclosed conservative, balanced, and income-focused decision scores. Browser-local paper assignment can continue into the covered-call side of a wheel workflow; no real position or order is created.
+
 ## Schwab market-data migration
 
 The registered OAuth callback URL is:

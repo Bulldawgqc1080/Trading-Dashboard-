@@ -2,7 +2,7 @@
 
 const assert = require('assert');
 const oauth = require('../lib/schwab/oauth');
-const { flattenCalls, buildSchwabChain, standardContract } = require('../lib/options/schwab');
+const { flattenOptions, flattenCalls, buildSchwabChain, standardContract } = require('../lib/options/schwab');
 
 const env = {
   SCHWAB_CLIENT_ID: 'test-client',
@@ -38,6 +38,10 @@ assert.equal(calls.length, 1);
 assert.equal(calls[0].strike, 150);
 assert.equal(calls[0].quoteAsOf, '2026-09-14T14:00:00.000Z');
 assert.equal(calls[0].delta, .3);
+const standardPut = {...standard,putCall:'PUT',symbol:'MSTR  261002P00130000',strikePrice:130,delta:-.2};
+const puts = flattenOptions({'2026-10-02:18':{'130.0':[standardPut],'140.0':[{...standardPut,strikePrice:140}]}},'PUT',0,135);
+assert.equal(puts.length,1);
+assert.equal(puts[0].strike,130);
 
 (async () => {
   const captured = [];
@@ -57,5 +61,11 @@ assert.equal(calls[0].delta, .3);
   assert.equal(chain.underlying.symbol, 'AAPL');
   assert.equal(chain.underlying.price, 140);
   assert.equal(chain.underlying.quoteAsOf, '2026-09-14T14:05:00.000Z');
+  const putRequest = async (path, params) => path.endsWith('/quotes')
+    ? {AAPL:{quote:{lastPrice:140,quoteTime:Date.parse('2026-09-14T14:05:00Z')}}}
+    : {putExpDateMap:{'2026-10-02:18':{'130.0':[standardPut],'140.0':[{...standardPut,strikePrice:140}]}}};
+  const putChain = await buildSchwabChain({request:putRequest,accessToken:'access-test',symbol:'AAPL',contractType:'PUT',maxStrike:135,minDte:7,maxDte:45,now:Date.parse('2026-09-14T12:00:00Z')});
+  assert.equal(putChain.puts.length,1);
+  assert.equal(putChain.puts[0].strike,130);
   console.log('schwab.test.js passed');
 })().catch(err => { console.error(err); process.exit(1); });

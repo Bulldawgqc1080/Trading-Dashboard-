@@ -351,6 +351,7 @@ const server = http.createServer(async (req, res) => {
 
   if (parsed.pathname === '/api/options/chain' || parsed.pathname === '/api/options/mstr') {
     const symbol = parsed.pathname === '/api/options/mstr' ? 'MSTR' : String(parsed.query.symbol || '').trim().toUpperCase();
+    const contractType = String(parsed.query.type || 'call').toUpperCase() === 'PUT' ? 'PUT' : 'CALL';
     if (!/^[A-Z][A-Z0-9.-]{0,9}$/.test(symbol)) {
       res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, max-age=0' });
       res.end(JSON.stringify({ status: 'invalid_symbol', error: 'Enter a valid stock or ETF ticker.' }));
@@ -375,8 +376,8 @@ const server = http.createServer(async (req, res) => {
     try {
       const [data, eventRisk] = await Promise.all([
         schwabAuth.session
-          ? buildSchwabChain({ accessToken: schwabAuth.session.accessToken, symbol, minDte: parsed.query.minDte, maxDte: parsed.query.maxDte, minStrike: parsed.query.minStrike })
-          : buildOptionChain({ request: tradierGet, symbol, minDte: parsed.query.minDte, maxDte: parsed.query.maxDte, minStrike: parsed.query.minStrike }),
+          ? buildSchwabChain({ accessToken: schwabAuth.session.accessToken, symbol, contractType, minDte: parsed.query.minDte, maxDte: parsed.query.maxDte, minStrike: parsed.query.minStrike, maxStrike: parsed.query.maxStrike })
+          : buildOptionChain({ request: tradierGet, symbol, contractType, minDte: parsed.query.minDte, maxDte: parsed.query.maxDte, minStrike: parsed.query.minStrike, maxStrike: parsed.query.maxStrike }),
         getEarningsRisk(symbol)
       ]);
       res.writeHead(200, responseHeaders);
