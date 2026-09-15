@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="SIBT — reliability-first market environment dashboard for swing traders.">
   <title>SIBT — Should I Be Trading?</title>
-  <link rel="stylesheet" href="/styles.css?v=9">
+  <link rel="stylesheet" href="/styles.css?v=10">
   <link rel="stylesheet" href="/options-desk.css?v=4">
 </head>
 <body>
@@ -19,6 +19,26 @@
 
   <main class="dashboard-shell">
     <div id="statusBanner"></div>
+
+    <section id="morningBrief" class="card morning-brief" aria-label="Decision-first morning brief">
+      <div class="morning-head">
+        <div>
+          <div class="metric-label">DECISION-FIRST MORNING BRIEF</div>
+          <div id="briefHeadline" class="morning-title">Waiting for live market read…</div>
+          <p id="briefSubtitle" class="card-kicker">Market permission, regime, strategy gates, and the best eligible watchlist setup.</p>
+        </div>
+        <div id="briefRegime" class="regime-badge">REGIME UNKNOWN</div>
+      </div>
+      <div class="morning-grid">
+        <div class="morning-item"><span>New-position size</span><strong id="briefSize">—</strong><small id="briefSizeNote">Waiting for regime plan</small></div>
+        <div class="morning-item"><span>New stock</span><strong id="briefStocks">—</strong><small id="briefStocksNote">Waiting for permission</small></div>
+        <div class="morning-item"><span>Cash-secured puts</span><strong id="briefPuts">—</strong><small id="briefPutsNote">Waiting for permission</small></div>
+        <div class="morning-item"><span>Covered calls</span><strong id="briefCalls">—</strong><small id="briefCallsNote">Waiting for permission</small></div>
+        <div class="morning-item"><span>Best eligible setup</span><strong id="briefBest">—</strong><small id="briefBestNote">Waiting for watchlist</small></div>
+        <div class="morning-item"><span>Biggest visible risk</span><strong id="briefRisk">—</strong><small id="briefRiskNote">Scheduled risk only; surprises remain unknowable</small></div>
+      </div>
+      <p class="trust-note">Strategy gates are deterministic planning controls—not trade recommendations. The regime layer does not change the validated market-v4 score.</p>
+    </section>
 
     <section class="hero">
       <article class="card decision-card">
@@ -151,7 +171,7 @@
     <span>SIBT — reliability-first build</span>
     <span id="footerTime"></span>
   </footer>
-  <script src="/app.js?v=11"></script>
+  <script src="/app.js?v=12"></script>
   <script src="/options-common.js?v=1"></script>
   <script src="/covered-call.js?v=6"></script>
   <script src="/cash-secured-put.js?v=3"></script>

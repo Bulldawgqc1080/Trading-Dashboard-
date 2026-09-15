@@ -8,6 +8,8 @@ SIBT is a **market permission tool**, not a directional prediction engine.
 
 ## Decision layers
 - The market-permission score measures whether broad conditions support new swing risk.
+- The separate `regime-v1` layer classifies the tape as Trending Bull, Choppy Bull, Neutral, Choppy Bear, Trending Bear, or Panic. It does not rewrite `market-v4`; it controls a disclosed new-position size multiplier and stock/CSP/covered-call strategy gates.
+- The decision-first morning brief summarizes the score, regime, strategy gates, best currently eligible watchlist setup, and biggest visible scheduled risk before the detailed analysis.
 - The `stock-v2` setup and momentum scores evaluate each ticker independently using trend structure, RSI, 10/20-session momentum, 20/60-session relative strength versus SPY, and completed-session volume trend. A single-day move contributes no more than eight momentum points.
 - Entry posture combines the stock setup with market permission without rewriting the stock's own score.
 - ATR-based entry references, earnings risk, average dollar volume, and browser-only risk/concentration limits provide a planning and sizing ceiling without placing orders.

@@ -6,6 +6,8 @@ const STOCK_BACKTEST_URL = '/api/stock-backtest';
 const WATCHLIST_STORAGE_KEY = 'sibt.watchlist.symbols.v1';
 const WATCHLIST_RISK_KEY = 'sibt.watchlist.risk.v1';
 const DEFAULT_WATCHLIST = ['TSLA', 'NVDA', 'PYPL', 'MSTR', 'HD'];
+let lastMarketData = null;
+let lastWatchlistData = null;
 
 function esc(value){return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]))}
 function quoteStamp(value){return value && !isNaN(Date.parse(value)) ? new Date(value).toLocaleString('en-US', { timeZone: 'America/New_York', timeZoneName: 'short' }) : 'unavailable'}
@@ -29,7 +31,68 @@ function todayCallText(data){
   return 'Do less, wait for cleaner conditions, and protect decision quality.';
 }
 
+function permissionTone(label){
+  return label === 'ALLOWED' ? 'good' : ['SELECTIVE','PLANNING'].includes(label) ? 'warn' : 'bad';
+}
+function setBriefPermission(id, item){
+  const label = item?.label || '—';
+  const value = document.getElementById(id);
+  value.textContent = label;
+  value.className = permissionTone(label);
+  document.getElementById(`${id}Note`).textContent = item?.note || 'Waiting for permission';
+}
+function bestEligibleSetup(data){
+  const stocks = data?.stocks || [];
+  const eligible = stocks.filter(stock => stock.signal?.label === 'FAVORABLE').sort((a,b) => Number(b.combinedScore)-Number(a.combinedScore));
+  if (eligible.length) return {label:`${eligible[0].symbol} · ${eligible[0].combinedScore}`, note:'Highest-scoring FAVORABLE entry posture in the current watchlist'};
+  const highest = [...stocks].sort((a,b) => Number(b.combinedScore)-Number(a.combinedScore))[0];
+  return highest
+    ? {label:'NO ELIGIBLE SETUP', note:`Highest raw setup: ${highest.symbol} · ${highest.combinedScore} · ${highest.signal?.label || highest.verdict}`}
+    : {label:'—', note:'Waiting for watchlist'};
+}
+function biggestVisibleRisk(data){
+  const nearest = data?.scheduledEvents?.nearest;
+  if (nearest?.at) {
+    const eventTime = Date.parse(nearest.at), days = (eventTime-Date.now())/86400000;
+    if (Number.isFinite(days) && days >= 0 && days <= 7) return {label:nearest.label, note:new Date(nearest.at).toLocaleString('en-US',{timeZone:'America/New_York',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'})};
+  }
+  if (data?.blockers?.length) return {label:data.blockers[0], note:'Highest-priority active model blocker'};
+  return {label:'NO MAJOR SCHEDULED RISK', note:'Within published calendar coverage; unscheduled news remains unknowable'};
+}
+function renderMorningBrief(){
+  const data = lastMarketData;
+  if (!data || data.status === 'unavailable' || !data.regimePlan) {
+    document.getElementById('briefHeadline').textContent = 'NO TRUSTWORTHY DECISION';
+    document.getElementById('briefSubtitle').textContent = 'Wait for healthy live data before using the dashboard.';
+    document.getElementById('briefRegime').textContent = 'REGIME UNKNOWN';
+    document.getElementById('briefSize').textContent = '0.00×';
+    ['briefStocks','briefPuts','briefCalls'].forEach(id=>setBriefPermission(id,{label:'PAUSED',note:'Live market read unavailable.'}));
+    return;
+  }
+  const plan = data.regimePlan;
+  const call = data.permissionLabel === 'FAVORABLE' ? 'TRADE DISCIPLINED' : data.permissionLabel === 'SELECTIVE' ? 'TRADE SELECTIVELY' : 'STAND DOWN';
+  document.getElementById('briefHeadline').textContent = `${data.score}/100 — ${call}`;
+  document.getElementById('briefSubtitle').textContent = `${data.permissionLabel.replace('_',' ')} market permission · ${plan.modelVersion}`;
+  document.getElementById('briefRegime').textContent = plan.regime;
+  document.getElementById('briefRegime').className = `regime-badge ${plan.regime.includes('BULL')?'good':plan.regime === 'NEUTRAL'?'warn':'bad'}`;
+  document.getElementById('briefSize').textContent = `${Number(plan.sizeMultiplier).toFixed(2)}×`;
+  document.getElementById('briefSize').className = permissionTone(plan.sizeMultiplier >= .75 ? 'ALLOWED' : plan.sizeMultiplier > 0 ? 'SELECTIVE' : 'PAUSED');
+  document.getElementById('briefSizeNote').textContent = !plan.marketOpen ? 'Market closed; planning only' : plan.eventCapActive ? 'Scheduled-event cap active' : plan.sizeMultiplier ? 'Applied to browser-only risk sizing' : 'Fresh-position sizing paused';
+  setBriefPermission('briefStocks',plan.strategies?.newPositions);
+  setBriefPermission('briefPuts',plan.strategies?.cashSecuredPuts);
+  setBriefPermission('briefCalls',plan.strategies?.coveredCalls);
+  const best = bestEligibleSetup(lastWatchlistData);
+  document.getElementById('briefBest').textContent = best.label;
+  document.getElementById('briefBest').className = best.label === 'NO ELIGIBLE SETUP' ? 'warn' : 'good';
+  document.getElementById('briefBestNote').textContent = best.note;
+  const risk = biggestVisibleRisk(data);
+  document.getElementById('briefRisk').textContent = risk.label;
+  document.getElementById('briefRisk').className = risk.label === 'NO MAJOR SCHEDULED RISK' ? 'good' : 'warn';
+  document.getElementById('briefRiskNote').textContent = risk.note;
+}
+
 function renderUnavailable(data) {
+  lastMarketData = data;
   document.getElementById('statusBanner').innerHTML = `<div class="banner err">Live market data unavailable — do not use this tool until data integrity is restored. ${data?.systemStatus?.reason || ''}</div>`;
   document.getElementById('decision').textContent = 'UNAVAILABLE';
   document.getElementById('decision').className = 'decision UNAVAILABLE';
@@ -46,6 +109,7 @@ function renderUnavailable(data) {
   document.getElementById('quality').innerHTML = `<div class="kv"><span>Status</span><span class="subtle">UNAVAILABLE</span></div>`;
   document.getElementById('modelTrust').innerHTML = `<div class="kv"><span>Trust level</span><span class="subtle">LOW</span></div><div class="trust-note">The model is intentionally suppressed because critical feeds are unavailable.</div>`;
   document.getElementById('snapshot').innerHTML = '';
+  renderMorningBrief();
 }
 
 function decisionDisplay(data) {
@@ -55,6 +119,7 @@ function decisionDisplay(data) {
 }
 
 function renderMarket(data) {
+  lastMarketData = data;
   const limited = data.status !== 'ok' || (data.dataQuality?.proxyInputs || []).length || (data.dataQuality?.missingInputs || []).length;
   const bannerClass = limited ? 'warn' : 'ok';
   const bannerText = limited
@@ -86,9 +151,9 @@ function renderMarket(data) {
   const nearest = events.nearest;
   const eventText = nearest ? `${nearest.label} · ${new Date(nearest.at).toLocaleString('en-US', {timeZone:'America/New_York',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'})}` : 'None in published coverage';
   document.getElementById('snapshot').innerHTML = `<div class="kv"><span>SPY</span><span>${m.spy?.price ?? '—'} (${m.spy?.chg ?? '—'}%)</span></div><div class="kv"><span>QQQ</span><span>${m.qqq?.price ?? '—'} (${m.qqq?.chg ?? '—'}%)</span></div><div class="kv"><span>VIX</span><span>${m.vix?.price ?? '—'}</span></div><div class="kv"><span>DXY</span><span>${m.dxy?.price ?? '—'}</span></div><div class="kv"><span>10Y</span><span>${m.tnx?.price ?? '—'}</span></div><div class="market-event ${events.highImpact24hr || events.fomc72hr ? 'near' : ''}"><div class="metric-label">NEXT HIGH-IMPACT EVENT</div><strong>${esc(eventText)}</strong><small>Official Fed/BLS calendar · coverage through ${esc(events.coverageThrough || 'unknown')}</small></div>`;
+  renderMorningBrief();
 }
 
-let lastWatchlistData = null;
 function readRiskSettings() {
   try {
     const saved=JSON.parse(localStorage.getItem(WATCHLIST_RISK_KEY)||'{}');
@@ -101,15 +166,16 @@ function rememberedShares(symbol) {
 }
 function sizeEntry(stock) {
   const settings=readRiskSettings(), existingShares=rememberedShares(stock.symbol), portfolio=settings.portfolioValue;
+  const multiplier=Math.max(0,Math.min(1,Number(lastMarketData?.regimePlan?.sizeMultiplier) || 0));
   const risk=Number(stock.entryPlan?.riskPerShare), price=Number(stock.price);
-  if (!(portfolio>0&&risk>0&&price>0)) return {available:false,existingShares};
-  const riskBudget=portfolio*settings.riskPct/100;
+  if (!(portfolio>0&&risk>0&&price>0)) return {available:false,existingShares,multiplier};
+  const riskBudget=portfolio*settings.riskPct/100*multiplier;
   const byRisk=Math.max(0,Math.floor(riskBudget/risk));
   const room=Math.max(0,portfolio*settings.maxPositionPct/100-existingShares*price);
   const byConcentration=Math.max(0,Math.floor(room/price));
   const shares=Math.min(byRisk,byConcentration);
   const postPct=(existingShares+shares)*price/portfolio*100;
-  return {available:true,existingShares,riskBudget,byRisk,byConcentration,shares,postPct,settings};
+  return {available:true,existingShares,riskBudget,byRisk,byConcentration,shares,postPct,settings,multiplier};
 }
 function earningsText(stock) {
   const earnings=stock.earnings||{}, days=earnings.daysToEarnings;
@@ -121,13 +187,14 @@ function renderWatchlist(data) {
   const grid = document.getElementById('watchlistGrid');
   if (!data || !data.stocks || !data.stocks.length) { statusEl.textContent = 'No watchlist data available.'; grid.innerHTML = ''; return; }
   lastWatchlistData=data;
-  statusEl.textContent = `${data.cached ? 'Cached' : 'Fresh'} stock data · ${data.stockModelVersion||'stock model unknown'} · Overall market permission: ${(data.marketPermission || 'unknown').replace('_',' ')}`;
+  renderMorningBrief();
+  statusEl.textContent = `${data.cached ? 'Cached' : 'Fresh'} stock data · ${data.stockModelVersion||'stock model unknown'} · Overall market permission: ${(data.marketPermission || 'unknown').replace('_',' ')} · Regime size: ${Number(data.regimePlan?.sizeMultiplier ?? 0).toFixed(2)}×`;
   grid.innerHTML = data.stocks.map(s => {
     const sizing=sizeEntry(s), plan=s.entryPlan||{}, earnings=s.earnings||{};
     const eventNear=Number.isFinite(earnings.daysToEarnings)&&earnings.daysToEarnings>=0&&earnings.daysToEarnings<=7;
-    const sizingLabel=sizing.available?`${sizing.shares.toLocaleString()} shares${s.signal?.label==='FAVORABLE'?'':' · planning only'}`:'Enter portfolio value';
+    const sizingLabel=sizing.available?(sizing.multiplier===0?'0 shares · regime paused':`${sizing.shares.toLocaleString()} shares${s.signal?.label==='FAVORABLE'?'':' · planning only'}`):'Enter portfolio value';
     const sizingNote=sizing.available
-      ? `Risk budget ${money(sizing.riskBudget)} · remembered shares ${sizing.existingShares.toLocaleString()} · post-entry position ${sizing.postPct.toFixed(1)}%. Ceiling is the lower of risk and concentration limits.`
+      ? `Regime-adjusted risk budget ${money(sizing.riskBudget)} (${sizing.multiplier.toFixed(2)}× normal) · remembered shares ${sizing.existingShares.toLocaleString()} · post-entry position ${sizing.postPct.toFixed(1)}%. Ceiling is the lower of risk and concentration limits.`
       : `${plan.note||'Technical references only.'} Sizing remains unavailable until portfolio value is entered.`;
     return `<div class="wl-card ${s.verdict}">
       <div class="wl-row"><div><div class="wl-sym">${esc(s.symbol)}</div><div class="wl-price">$${Number(s.price).toFixed(2)} <span style="font-size:11px;color:${s.changePct>=0?'var(--green)':'var(--red)'}">${s.changePct>=0?'+':''}${Number(s.changePct).toFixed(2)}%</span></div></div><div class="wl-badge ${s.verdict}">${esc(s.verdict)} SETUP</div></div>

@@ -5,6 +5,7 @@ const https = require('https');
 const { MODEL_VERSION, STOCK_MODEL_VERSION, PORT, CACHE_TTL, WATCHLIST, WATCHLIST_CACHE_TTL } = require('../lib/config');
 const { calcSMA, calcEMA, calcRSI, calcSlope, calcTrend, calcATR } = require('../lib/indicators');
 const { buildMarketScore, estimateVixPercentile } = require('../lib/scoring/market');
+const { buildRegimePlan } = require('../lib/scoring/regime');
 const { buildConfidence } = require('../lib/scoring/confidence');
 const { buildStockVerdict, buildWatchlistSignal } = require('../lib/scoring/watchlist');
 const { getFeedQuality, buildSystemStatus } = require('../lib/health');
@@ -242,6 +243,7 @@ async function getMarketPayload() {
     };
   } else {
     const score = buildMarketScore(marketData);
+    const regimePlan = buildRegimePlan(marketData, score);
     payload = {
       status: systemStatus.status,
       timestamp: new Date().toISOString(),
@@ -257,6 +259,7 @@ async function getMarketPayload() {
       validationWarnings: score.validationWarnings,
       categoryScores: score.categoryScores,
       vetoFlags: score.vetoFlags,
+      regimePlan,
       confidenceScore: confidence.confidenceScore,
       confidenceLabel: confidence.confidenceLabel,
       confidenceReasons: confidence.confidenceReasons,
@@ -298,7 +301,7 @@ async function getWatchlistPayload(requestedSymbols) {
   const symbols = normalizeWatchlistSymbols(requestedSymbols, WATCHLIST);
   const cacheKey = `${market.decision || 'NO'}:${symbols.join(',')}`;
   const cached = watchlistCache.get(cacheKey);
-  if (cached && now - cached.ts < WATCHLIST_CACHE_TTL) return { stocks: cached.data, symbols, stockModelVersion:STOCK_MODEL_VERSION, marketPermission: market.permissionLabel || 'LOW_PERMISSION', cached: true };
+  if (cached && now - cached.ts < WATCHLIST_CACHE_TTL) return { stocks: cached.data, symbols, stockModelVersion:STOCK_MODEL_VERSION, marketPermission: market.permissionLabel || 'LOW_PERMISSION', regimePlan:market.regimePlan || null, cached: true };
   if (!spyHistory) throw new Error('Missing SPY history for watchlist');
   const stocks = await buildWatchlistData(spyHistory, market.decision || 'NO', symbols);
   const marketStatus=getMarketStatus();
@@ -308,7 +311,7 @@ async function getWatchlistPayload(requestedSymbols) {
   }
   watchlistCache.set(cacheKey, { data: stocks, ts: now });
   if (watchlistCache.size > 24) watchlistCache.delete(watchlistCache.keys().next().value);
-  return { stocks, symbols, stockModelVersion:STOCK_MODEL_VERSION, marketPermission: market.permissionLabel || 'LOW_PERMISSION', cached: false };
+  return { stocks, symbols, stockModelVersion:STOCK_MODEL_VERSION, marketPermission: market.permissionLabel || 'LOW_PERMISSION', regimePlan:market.regimePlan || null, cached: false };
 }
 
 const server = http.createServer(async (req, res) => {
