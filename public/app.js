@@ -2,7 +2,9 @@ const API_URL = '/api/market';
 const WATCHLIST_URL = '/api/watchlist';
 const BACKTEST_URL = '/api/backtest';
 const JOURNAL_URL = '/api/journal';
+const STOCK_BACKTEST_URL = '/api/stock-backtest';
 const WATCHLIST_STORAGE_KEY = 'sibt.watchlist.symbols.v1';
+const WATCHLIST_RISK_KEY = 'sibt.watchlist.risk.v1';
 const DEFAULT_WATCHLIST = ['TSLA', 'NVDA', 'PYPL', 'MSTR', 'HD'];
 
 function esc(value){return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]))}
@@ -12,6 +14,8 @@ function scoreTone(s){return s>=70?'good':s>=45?'warn':'bad'}
 function pill(text, cls){return `<span class="pill ${cls}">${text}</span>`}
 function trustTone(score){return score >= 80 ? 'good' : score >= 55 ? 'warn' : 'bad'}
 function statDisplay(value, fallback = '—'){return value != null ? `${value}%` : fallback}
+function money(value){return Number.isFinite(Number(value)) ? Number(value).toLocaleString('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2}) : '—'}
+function compactMoney(value){return Number.isFinite(Number(value)) ? `$${Number(value).toLocaleString('en-US',{notation:'compact',maximumFractionDigits:1})}` : '—'}
 function decisionBadgeText(data){
   if (data.status === 'unavailable') return 'No trustworthy read';
   if (data.permissionLabel === 'FAVORABLE') return 'Conditions support active trading';
@@ -84,12 +88,57 @@ function renderMarket(data) {
   document.getElementById('snapshot').innerHTML = `<div class="kv"><span>SPY</span><span>${m.spy?.price ?? '—'} (${m.spy?.chg ?? '—'}%)</span></div><div class="kv"><span>QQQ</span><span>${m.qqq?.price ?? '—'} (${m.qqq?.chg ?? '—'}%)</span></div><div class="kv"><span>VIX</span><span>${m.vix?.price ?? '—'}</span></div><div class="kv"><span>DXY</span><span>${m.dxy?.price ?? '—'}</span></div><div class="kv"><span>10Y</span><span>${m.tnx?.price ?? '—'}</span></div><div class="market-event ${events.highImpact24hr || events.fomc72hr ? 'near' : ''}"><div class="metric-label">NEXT HIGH-IMPACT EVENT</div><strong>${esc(eventText)}</strong><small>Official Fed/BLS calendar · coverage through ${esc(events.coverageThrough || 'unknown')}</small></div>`;
 }
 
+let lastWatchlistData = null;
+function readRiskSettings() {
+  try {
+    const saved=JSON.parse(localStorage.getItem(WATCHLIST_RISK_KEY)||'{}');
+    return {portfolioValue:Number(saved.portfolioValue)||0,riskPct:Number(saved.riskPct)||0.5,maxPositionPct:Number(saved.maxPositionPct)||10};
+  } catch { return {portfolioValue:0,riskPct:0.5,maxPositionPct:10}; }
+}
+function rememberedShares(symbol) {
+  try { return Math.max(0,Number(JSON.parse(localStorage.getItem('sibt.options.positions.v2')||'{}')?.[symbol]?.shares)||0); }
+  catch { return 0; }
+}
+function sizeEntry(stock) {
+  const settings=readRiskSettings(), existingShares=rememberedShares(stock.symbol), portfolio=settings.portfolioValue;
+  const risk=Number(stock.entryPlan?.riskPerShare), price=Number(stock.price);
+  if (!(portfolio>0&&risk>0&&price>0)) return {available:false,existingShares};
+  const riskBudget=portfolio*settings.riskPct/100;
+  const byRisk=Math.max(0,Math.floor(riskBudget/risk));
+  const room=Math.max(0,portfolio*settings.maxPositionPct/100-existingShares*price);
+  const byConcentration=Math.max(0,Math.floor(room/price));
+  const shares=Math.min(byRisk,byConcentration);
+  const postPct=(existingShares+shares)*price/portfolio*100;
+  return {available:true,existingShares,riskBudget,byRisk,byConcentration,shares,postPct,settings};
+}
+function earningsText(stock) {
+  const earnings=stock.earnings||{}, days=earnings.daysToEarnings;
+  if (earnings.date&&Number.isFinite(days)&&days>=0) return `${earnings.date} · ${days}d · ${earnings.estimated?'ESTIMATE':'SCHEDULED'}`;
+  return earnings.status==='unavailable'?'CALENDAR UNAVAILABLE':'UNKNOWN — not event-free';
+}
 function renderWatchlist(data) {
   const statusEl = document.getElementById('watchlistStatus');
   const grid = document.getElementById('watchlistGrid');
   if (!data || !data.stocks || !data.stocks.length) { statusEl.textContent = 'No watchlist data available.'; grid.innerHTML = ''; return; }
-  statusEl.textContent = `${data.cached ? 'Cached' : 'Fresh'} stock data · Overall market permission: ${(data.marketPermission || 'unknown').replace('_',' ')}`;
-  grid.innerHTML = data.stocks.map(s => `<div class="wl-card ${s.verdict}"><div class="wl-row"><div><div class="wl-sym">${esc(s.symbol)}</div><div class="wl-price">$${Number(s.price).toFixed(2)} <span style="font-size:11px;color:${s.changePct >= 0 ? 'var(--green)' : 'var(--red)'}">${s.changePct >= 0 ? '+' : ''}${s.changePct.toFixed(2)}%</span></div></div><div class="wl-badge ${s.verdict}">${esc(s.verdict)} SETUP</div></div><div class="wl-posture"><span>Entry posture</span><strong class="${s.signal?.level || 'caution'}">${esc(s.signal?.label || 'CAUTION')}</strong><small>${esc(s.signal?.shortReason || '—')}</small></div><div class="wl-levels"><div class="kv"><span>Stock setup</span><span style="color:${scoreColor(s.setupScore)}">${s.setupScore}</span></div><div class="kv"><span>Market permission</span><span>${esc((data.marketPermission || 'unknown').replace('_',' '))}</span></div><div class="kv"><span>Momentum</span><span style="color:${scoreColor(s.momentumScore)}">${s.momentumScore}</span></div><div class="kv"><span>RS vs SPY</span><span>${s.relStrength >= 0 ? '+' : ''}${s.relStrength.toFixed(1)}%</span></div><div class="kv"><span>Support / 20D</span><span>${s.support ?? '—'} / ${s.resistance ?? '—'}</span></div></div><div><div class="wl-section-title">WHY THE STOCK SCORES THIS WAY</div><div class="wl-list">${(s.why || []).slice(0,3).map(r => pill(esc(r), '')).join('') || '<span class="muted">—</span>'}</div></div><div><div class="wl-section-title">WHAT THE STOCK NEEDS</div><div class="wl-list">${(s.needs || []).map(r => pill(esc(r), 'warn')).join('') || '<span class="muted">—</span>'}</div></div><div class="desk-actions"><button type="button" class="wl-options" data-options-symbol="${esc(s.symbol)}">Covered calls</button><button type="button" class="wl-options" data-puts-symbol="${esc(s.symbol)}">Cash-secured puts</button></div></div>`).join('');
+  lastWatchlistData=data;
+  statusEl.textContent = `${data.cached ? 'Cached' : 'Fresh'} stock data · ${data.stockModelVersion||'stock model unknown'} · Overall market permission: ${(data.marketPermission || 'unknown').replace('_',' ')}`;
+  grid.innerHTML = data.stocks.map(s => {
+    const sizing=sizeEntry(s), plan=s.entryPlan||{}, earnings=s.earnings||{};
+    const eventNear=Number.isFinite(earnings.daysToEarnings)&&earnings.daysToEarnings>=0&&earnings.daysToEarnings<=7;
+    const sizingLabel=sizing.available?`${sizing.shares.toLocaleString()} shares${s.signal?.label==='FAVORABLE'?'':' · planning only'}`:'Enter portfolio value';
+    const sizingNote=sizing.available
+      ? `Risk budget ${money(sizing.riskBudget)} · remembered shares ${sizing.existingShares.toLocaleString()} · post-entry position ${sizing.postPct.toFixed(1)}%. Ceiling is the lower of risk and concentration limits.`
+      : `${plan.note||'Technical references only.'} Sizing remains unavailable until portfolio value is entered.`;
+    return `<div class="wl-card ${s.verdict}">
+      <div class="wl-row"><div><div class="wl-sym">${esc(s.symbol)}</div><div class="wl-price">$${Number(s.price).toFixed(2)} <span style="font-size:11px;color:${s.changePct>=0?'var(--green)':'var(--red)'}">${s.changePct>=0?'+':''}${Number(s.changePct).toFixed(2)}%</span></div></div><div class="wl-badge ${s.verdict}">${esc(s.verdict)} SETUP</div></div>
+      <div class="wl-posture"><span>Entry posture</span><strong class="${s.signal?.level||'caution'}">${esc(s.signal?.label||'CAUTION')}</strong><small>${esc(s.signal?.shortReason||'—')}</small></div>
+      <div class="wl-levels"><div class="kv"><span>Stock setup</span><span style="color:${scoreColor(s.setupScore)}">${s.setupScore}</span></div><div class="kv"><span>Market permission</span><span>${esc((data.marketPermission||'unknown').replace('_',' '))}</span></div><div class="kv"><span>Momentum</span><span style="color:${scoreColor(s.momentumScore)}">${s.momentumScore}</span></div><div class="kv"><span>RS vs SPY · 20D / 60D</span><span>${s.relStrength>=0?'+':''}${Number(s.relStrength).toFixed(1)}% / ${s.relStrength60>=0?'+':''}${Number(s.relStrength60).toFixed(1)}%</span></div></div>
+      <div class="wl-event ${eventNear?'near':''}"><span>Next earnings</span><strong>${esc(earningsText(s))}</strong><small>${esc(earnings.note||'Unknown does not mean event-free.')}</small></div>
+      <div class="wl-entry-plan"><div class="wl-section-title">TECHNICAL ENTRY PLAN</div><div class="wl-levels"><div class="kv"><span>Buy zone</span><span>${plan.buyZone?`${money(plan.buyZone.low)}–${money(plan.buyZone.high)}`:'—'}</span></div><div class="kv"><span>Invalidation reference</span><span>${money(plan.invalidation)}</span></div><div class="kv"><span>Sizing ceiling</span><strong>${sizingLabel}</strong></div></div><small>${esc(sizingNote)}</small></div>
+      <details class="wl-advanced"><summary>Advanced metrics and score details</summary><div class="wl-levels"><div class="kv"><span>ATR 14 / price</span><span>${money(s.atr14)} / ${s.volatilityPct??'—'}%</span></div><div class="kv"><span>EMA 21 / 20D high</span><span>${money(s.ema21Reference)} / ${money(s.high20)}</span></div><div class="kv"><span>20D dollar volume</span><span>${compactMoney(s.avgDollarVolume20)}</span></div><div class="kv"><span>5D / 20D volume</span><span>${Number.isFinite(s.volumeTrend)?s.volumeTrend.toFixed(2)+'×':'—'}</span></div><div class="kv"><span>Risk / share</span><span>${money(plan.riskPerShare)}</span></div><div class="kv"><span>Next price reference</span><span>${money(plan.nextReference)}</span></div><div class="kv"><span>Reward / risk</span><span>${plan.rewardRisk!=null?plan.rewardRisk.toFixed(2)+'×':'—'}</span></div></div><div class="wl-section-title">WHY THE STOCK SCORES THIS WAY</div><div class="wl-list">${(s.why||[]).slice(0,3).map(reason=>pill(esc(reason),'')).join('')||'<span class="muted">—</span>'}</div><div class="wl-section-title">WHAT THE STOCK NEEDS</div><div class="wl-list">${(s.needs||[]).map(reason=>pill(esc(reason),'warn')).join('')||'<span class="muted">—</span>'}</div></details>
+      <div class="desk-actions"><button type="button" class="wl-options" data-options-symbol="${esc(s.symbol)}">Covered calls</button><button type="button" class="wl-options" data-puts-symbol="${esc(s.symbol)}">Cash-secured puts</button></div>
+    </div>`;
+  }).join('');
   grid.querySelectorAll('[data-options-symbol]').forEach(button => button.addEventListener('click', () => {
     const symbolInput = document.querySelector('#ccForm [name="symbol"]');
     if (!symbolInput) return;
@@ -120,17 +169,28 @@ function normalizeWatchlistInput(value) {
 let watchlistSymbols = readSavedWatchlist();
 const watchlistEditor = document.getElementById('watchlistEditor');
 watchlistEditor.elements.symbols.value = watchlistSymbols.join(', ');
+const initialRisk=readRiskSettings();
+watchlistEditor.elements.portfolioValue.value=initialRisk.portfolioValue||'';
+watchlistEditor.elements.riskPct.value=initialRisk.riskPct;
+watchlistEditor.elements.maxPositionPct.value=initialRisk.maxPositionPct;
+function saveRiskSettings(){
+  const settings={portfolioValue:Math.max(0,Number(watchlistEditor.elements.portfolioValue.value)||0),riskPct:Math.min(10,Math.max(.1,Number(watchlistEditor.elements.riskPct.value)||.5)),maxPositionPct:Math.min(100,Math.max(1,Number(watchlistEditor.elements.maxPositionPct.value)||10))};
+  localStorage.setItem(WATCHLIST_RISK_KEY,JSON.stringify(settings));
+  return settings;
+}
 watchlistEditor.addEventListener('submit', async event => {
   event.preventDefault();
   const next = normalizeWatchlistInput(watchlistEditor.elements.symbols.value);
   if (!next.length) { document.getElementById('watchlistStatus').textContent = 'Enter at least one valid ticker.'; return; }
   watchlistSymbols = next;
   localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(next));
+  saveRiskSettings();
   watchlistEditor.elements.symbols.value = next.join(', ');
   document.getElementById('watchlistStatus').textContent = 'Updating watchlist…';
   try { renderWatchlist(await loadJson(`${WATCHLIST_URL}?symbols=${encodeURIComponent(next.join(','))}`)); }
   catch (err) { document.getElementById('watchlistStatus').textContent = `Watchlist failed: ${err.message}`; }
 });
+['portfolioValue','riskPct','maxPositionPct'].forEach(name=>watchlistEditor.elements[name].addEventListener('change',()=>{saveRiskSettings();if(lastWatchlistData)renderWatchlist(lastWatchlistData);}));
 document.getElementById('watchlistReset').addEventListener('click', () => {
   watchlistSymbols = [...DEFAULT_WATCHLIST];
   localStorage.removeItem(WATCHLIST_STORAGE_KEY);
@@ -153,6 +213,13 @@ function renderBacktest(data) {
   panel.innerHTML = `<div class="bt-grid">${buckets.map(key => { const b = data.buckets[key] || {}; const col = key === 'YES' ? 'var(--green)' : key === 'CAUTION' ? 'var(--amber)' : 'var(--red)'; return `<div class="bt-card"><div class="kv"><span style="color:${col};font-weight:700">${key}</span><span class="muted">${b.count || 0} entries</span></div><div class="kv"><span>Avg 1D</span><span>${b.avg1d != null ? b.avg1d + '%' : '—'}</span></div><div class="kv"><span>Avg 5D</span><span>${b.avg5d != null ? b.avg5d + '%' : '—'}</span></div><div class="kv"><span>Avg 10D</span><span>${b.avg10d != null ? b.avg10d + '%' : '—'}</span></div><div class="kv"><span>Win 1D</span><span>${b.winRate1d != null ? b.winRate1d + '%' : '—'}</span></div><div class="kv"><span>Win 5D</span><span>${b.winRate5d != null ? b.winRate5d + '%' : '—'}</span></div><div class="kv"><span>Win 10D</span><span>${b.winRate10d != null ? b.winRate10d + '%' : '—'}</span></div></div>`; }).join('')}</div><div style="margin-top:8px;font-size:10px;color:var(--text3);">Interpret this as a permission study, not a directional market forecast. A NO bucket can still include positive forward returns if broad conditions were poor for clean entries but index drift stayed positive.</div>`;
 }
 
+function renderStockValidation(data){
+  const status=document.getElementById('stockValidationStatus'),panel=document.getElementById('stockValidationPanel');
+  if(!data?.buckets){status.textContent='No stock validation data available.';panel.innerHTML='';return;}
+  status.textContent=`${data.modelVersion||'stock model'} · ${data.evaluatedSamples||0} verified 5D outcomes · minimum ${data.minimumPerBucket||10} per bucket`;
+  panel.innerHTML=`<div class="bt-grid">${['ACTIONABLE','WATCH','AVOID'].map(key=>{const bucket=data.buckets[key]||{};const color=key==='ACTIONABLE'?'var(--green)':key==='WATCH'?'var(--amber)':'var(--red)';return `<div class="bt-card"><div class="kv"><strong style="color:${color}">${key}</strong><span class="muted">${bucket.count||0} entries</span></div><div class="kv"><span>Avg 5D</span><span>${bucket.avg5d!=null?bucket.avg5d+'%':'—'}</span></div><div class="kv"><span>Win 5D</span><span>${bucket.winRate5d!=null?bucket.winRate5d+'%':'—'}</span></div><div class="kv"><span>Avg 10D</span><span>${bucket.avg10d!=null?bucket.avg10d+'%':'—'}</span></div></div>`;}).join('')}</div><p class="trust-note">${esc(data.warning||'Ticker outcomes use exact trading dates. Past results do not guarantee future performance.')}</p>`;
+}
+
 function renderJournal(data) {
   const status = document.getElementById('journalStatus');
   const panel = document.getElementById('journalPanel');
@@ -171,6 +238,7 @@ async function loadJson(url) {
 async function loadAll() {
   try { const market = await loadJson(API_URL); if (market.status === 'unavailable') renderUnavailable(market); else renderMarket(market); } catch (err) { renderUnavailable({ systemStatus: { reason: err.message } }); }
   try { renderWatchlist(await loadJson(`${WATCHLIST_URL}?symbols=${encodeURIComponent(watchlistSymbols.join(','))}`)); } catch (err) { document.getElementById('watchlistStatus').textContent = `Watchlist failed: ${err.message}`; }
+  try { renderStockValidation(await loadJson(STOCK_BACKTEST_URL)); } catch (err) { document.getElementById('stockValidationStatus').textContent = `Stock validation failed: ${err.message}`; }
   try { renderBacktest(await loadJson(BACKTEST_URL)); } catch (err) { document.getElementById('backtestStatus').textContent = `Backtest failed: ${err.message}`; }
   try { renderJournal(await loadJson(JOURNAL_URL)); } catch (err) { document.getElementById('journalStatus').textContent = `Journal failed: ${err.message}`; }
   document.getElementById('footerTime').textContent = new Date().toLocaleString();

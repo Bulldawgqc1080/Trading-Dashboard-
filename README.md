@@ -8,10 +8,11 @@ SIBT is a **market permission tool**, not a directional prediction engine.
 
 ## Decision layers
 - The market-permission score measures whether broad conditions support new swing risk.
-- Stock setup and momentum scores evaluate each ticker independently.
+- The `stock-v2` setup and momentum scores evaluate each ticker independently using trend structure, RSI, 10/20-session momentum, 20/60-session relative strength versus SPY, and completed-session volume trend. A single-day move contributes no more than eight momentum points.
 - Entry posture combines the stock setup with market permission without rewriting the stock's own score.
+- ATR-based entry references, earnings risk, average dollar volume, and browser-only risk/concentration limits provide a planning and sizing ceiling without placing orders.
 - The browser-local editable watchlist supports up to 12 tickers and links each name to the options desk.
-- Forward validation uses exact trading-date matches. Closed-market snapshots are excluded and performance percentages remain hidden until each decision bucket has at least 10 verified observations.
+- Market and ticker-level forward validation use exact trading-date matches. Closed-market snapshots are excluded and performance percentages remain hidden until each applicable bucket has at least 10 completed observations.
 - Proxy breadth is excluded from scoring. Published FOMC, CPI, jobs-report, market-holiday, and early-close dates are explicit model inputs.
 
 ## Basic test pass
@@ -55,6 +56,8 @@ lib/scoring/confidence.js
 lib/scoring/watchlist.js
 lib/journal/store.js
 lib/journal/backtest.js
+lib/journal/stock-store.js
+lib/journal/stock-backtest.js
 test/fixtures/*.json
 test/*.test.js
 ```

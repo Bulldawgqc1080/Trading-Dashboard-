@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="SIBT — reliability-first market environment dashboard for swing traders.">
   <title>SIBT — Should I Be Trading?</title>
-  <link rel="stylesheet" href="/styles.css?v=8">
+  <link rel="stylesheet" href="/styles.css?v=9">
   <link rel="stylesheet" href="/options-desk.css?v=4">
 </head>
 <body>
@@ -97,7 +97,7 @@
       </div>
     </section>
 
-    <section class="card section-card">
+    <section id="watchlist" class="card section-card">
       <div class="section-heading compact">
         <div>
           <div class="metric-label">WATCHLIST</div>
@@ -107,10 +107,13 @@
       <form id="watchlistEditor" class="watchlist-editor">
         <label for="watchlistSymbols">Tickers (up to 12, separated by commas)</label>
         <div class="watchlist-editor-row"><input id="watchlistSymbols" name="symbols" autocomplete="off" maxlength="140"><button type="submit">Update watchlist</button><button type="button" id="watchlistReset">Reset</button></div>
-        <p class="trust-note">Saved only in this browser. Stock setup quality is shown separately from overall market permission.</p>
+        <details class="watchlist-risk"><summary>Entry-sizing guardrails</summary><div class="watchlist-risk-grid"><label>Portfolio value ($)<input name="portfolioValue" type="number" min="0" step="100" placeholder="Optional"></label><label>Maximum risk / trade (%)<input name="riskPct" type="number" min="0.1" max="10" step="0.1" value="0.5"></label><label>Maximum position (%)<input name="maxPositionPct" type="number" min="1" max="100" step="1" value="10"></label></div><p class="trust-note">Browser-only. Sizing uses the technical invalidation reference and any shares remembered in the covered-call desk. It never places an order.</p></details>
+        <p class="trust-note">Tickers and sizing settings are saved only in this browser. Stock setup, market permission, and entry posture remain separate decisions.</p>
       </form>
       <div id="watchlistStatus" class="muted section-status">Loading watchlist...</div>
       <div id="watchlistGrid" class="watchlist-grid"></div>
+      <details class="stock-validation"><summary>Stock setup forward validation</summary><div id="stockValidationStatus" class="muted section-status">Loading stock-v2 outcomes...</div><div id="stockValidationPanel"></div></details>
+      <details class="stock-validation"><summary>How stock-v2 works—and what it does not know</summary><p class="trust-note">Stock setup scores only the ticker: trend structure, distance from key moving averages, RSI, 10/20-session price momentum, 20/60-session relative strength versus SPY, and recent completed-session volume trend. A single-day move contributes no more than 8 momentum points. Market permission is calculated separately, and entry posture combines the two without rewriting either score.</p><p class="trust-note">ATR-based buy zones, invalidation levels, reward/risk, and sizing are planning references—not support guarantees or order instructions. Earnings dates may be estimated. Fundamentals, valuation, sector-relative strength, taxes, slippage, and unscheduled news are not scored.</p></details>
     </section>
 
     <div id="strategyTabs" class="strategy-tabs" role="tablist" aria-label="Options strategy"><button type="button" role="tab" data-strategy="call">Covered calls</button><button type="button" role="tab" data-strategy="put">Cash-secured puts</button></div>
@@ -148,7 +151,7 @@
     <span>SIBT — reliability-first build</span>
     <span id="footerTime"></span>
   </footer>
-  <script src="/app.js?v=10"></script>
+  <script src="/app.js?v=11"></script>
   <script src="/options-common.js?v=1"></script>
   <script src="/covered-call.js?v=6"></script>
   <script src="/cash-secured-put.js?v=3"></script>
