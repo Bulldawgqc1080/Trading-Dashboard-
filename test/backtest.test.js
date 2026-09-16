@@ -1,6 +1,6 @@
 const assert = require('assert');
-const { backfillJournalOutcomes, buildBacktestSummary, buildValidationReport, summarizeConfidenceBuckets } = require('../lib/journal/backtest');
-const { getJournal, replaceJournal } = require('../lib/journal/store');
+const { backfillJournalOutcomes, buildBacktestSummary, buildValidationReport, summarizeConfidenceBuckets, independentDailyEntries } = require('../lib/journal/backtest');
+const { getJournal, replaceJournal, logJournalEntry } = require('../lib/journal/store');
 
 async function run() {
   const entries = [
@@ -37,6 +37,19 @@ async function run() {
   assert.strictEqual(written[0].outcome5d, 8);
   assert.strictEqual(written[1].validationEligible, false);
   assert.strictEqual(buildBacktestSummary().buckets.YES.avg5d, null, 'thin buckets must not publish performance percentages');
+
+  replaceJournal([]);
+  await logJournalEntry({entryKey:'market-v4:2026-09-10',date:'2026-09-10',modelVersion:'market-v4',decision:'CAUTION',score:50,marketStatus:'MARKET OPEN',spyEntry:100});
+  await logJournalEntry({entryKey:'market-v4:2026-09-10',date:'2026-09-10',modelVersion:'market-v4',decision:'YES',score:72,marketStatus:'MARKET OPEN',spyEntry:102});
+  const daily = getJournal();
+  assert.strictEqual(daily.length, 1, 'market validation must keep one independent observation per model/date');
+  assert.strictEqual(daily[0].decision, 'YES', 'later same-day read should refresh the daily observation');
+  assert.strictEqual(daily[0].spyEntry, 102);
+  assert.strictEqual(independentDailyEntries([
+    {modelVersion:'market-v4',date:'2026-09-10',ts:1,score:50},
+    {modelVersion:'market-v4',date:'2026-09-10',ts:2,score:72},
+    {modelVersion:'market-v4',date:'2026-09-11',ts:3,score:60}
+  ]).length, 2, 'historical same-day rows must count as one independent sample');
 
   console.log('backtest.test.js passed');
 }

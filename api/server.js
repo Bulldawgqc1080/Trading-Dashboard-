@@ -269,25 +269,30 @@ async function getMarketPayload() {
       scheduledEvents: marketData.scheduledEvents
     };
 
-    await logJournalEntry({
-      modelVersion: score.modelVersion,
-      decision: score.decision,
-      permissionLabel: score.permissionLabel,
-      score: score.weightedScore,
-      confidenceScore: confidence.confidenceScore,
-      confidenceLabel: confidence.confidenceLabel,
-      status: systemStatus.status,
-      marketStatus: marketData.marketStatus,
-      spyEntry: marketData.spy.price,
-      qqqEntry: marketData.qqq.price,
-      vixEntry: marketData.vix.price,
-      breadthMode: marketData.breadthMode,
-      topReasons: score.topReasons,
-      blockers: score.blockers,
-      validationWarnings: score.validationWarnings,
-      dataQuality: { label: feedQuality.label, staleFeeds: feedQuality.stale, errors: feedQuality.errors },
-      inputsSnapshot: { spy: marketData.spy.price, qqq: marketData.qqq.price, vix: marketData.vix.price, topSector: marketData.sectors[0]?.sym || null, nearestScheduledEvent: marketData.scheduledEvents?.nearest || null }
-    });
+    if (marketData.marketOpen) {
+      const observationDate = nyDateString(now);
+      await logJournalEntry({
+        date: observationDate,
+        entryKey: `${score.modelVersion}:${observationDate}`,
+        modelVersion: score.modelVersion,
+        decision: score.decision,
+        permissionLabel: score.permissionLabel,
+        score: score.weightedScore,
+        confidenceScore: confidence.confidenceScore,
+        confidenceLabel: confidence.confidenceLabel,
+        status: systemStatus.status,
+        marketStatus: marketData.marketStatus,
+        spyEntry: marketData.spy.price,
+        qqqEntry: marketData.qqq.price,
+        vixEntry: marketData.vix.price,
+        breadthMode: marketData.breadthMode,
+        topReasons: score.topReasons,
+        blockers: score.blockers,
+        validationWarnings: score.validationWarnings,
+        dataQuality: { label: feedQuality.label, staleFeeds: feedQuality.stale, errors: feedQuality.errors },
+        inputsSnapshot: { spy: marketData.spy.price, qqq: marketData.qqq.price, vix: marketData.vix.price, topSector: marketData.sectors[0]?.sym || null, nearestScheduledEvent: marketData.scheduledEvents?.nearest || null }
+      });
+    }
   }
 
   marketCache = { data: payload, ts: now, spyHistory };
@@ -326,6 +331,24 @@ const server = http.createServer(async (req, res) => {
     const marketStatus = getMarketStatus();
     res.writeHead(200, { 'Content-Type':'application/json', 'Cache-Control':'no-store, max-age=0' });
     res.end(JSON.stringify({ status:'ok', ...marketStatus, retrievedAt:new Date().toISOString() }));
+    return;
+  }
+  if (parsed.pathname === '/api/collect') {
+    const marketStatus = getMarketStatus();
+    if (!marketStatus.open) {
+      res.writeHead(200, { 'Content-Type':'application/json', 'Cache-Control':'no-store, max-age=0' });
+      res.end(JSON.stringify({status:'skipped',reason:marketStatus.label,retrievedAt:new Date().toISOString()}));
+      return;
+    }
+    try {
+      const market = await getMarketPayload();
+      const watchlist = await getWatchlistPayload(WATCHLIST.join(','));
+      res.writeHead(200, { 'Content-Type':'application/json', 'Cache-Control':'no-store, max-age=0' });
+      res.end(JSON.stringify({status:'collected',date:nyDateString(),marketModel:market.modelVersion,marketDecision:market.decision,stockModel:watchlist.stockModelVersion,stockSymbols:watchlist.symbols,retrievedAt:new Date().toISOString()}));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type':'application/json', 'Cache-Control':'no-store, max-age=0' });
+      res.end(JSON.stringify({status:'failed',error:err.message}));
+    }
     return;
   }
   if (parsed.pathname === '/api/schwab/login') {

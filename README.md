@@ -15,6 +15,7 @@ SIBT is a **market permission tool**, not a directional prediction engine.
 - ATR-based entry references, earnings risk, average dollar volume, and browser-only risk/concentration limits provide a planning and sizing ceiling without placing orders.
 - The browser-local editable watchlist supports up to 12 tickers and links each name to the options desk.
 - Market and ticker-level forward validation use exact trading-date matches. Closed-market snapshots are excluded and performance percentages remain hidden until each applicable bucket has at least 10 completed observations.
+- A Vercel weekday cron calls `/api/collect` at 18:00 UTC to capture one independent `market-v4` observation and the default server watchlist during regular market hours. Repeated same-day page loads refresh rather than inflate that market sample. Browser-only custom tickers still require a market-hours page visit to enter the stock-validation journal.
 - Proxy breadth is excluded from scoring. Published FOMC, CPI, jobs-report, market-holiday, and early-close dates are explicit model inputs.
 
 ## Basic test pass
