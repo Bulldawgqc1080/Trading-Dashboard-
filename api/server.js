@@ -493,6 +493,7 @@ const server = http.createServer(async (req, res) => {
 
   if (parsed.pathname === '/api/journal') {
     try {
+      await loadJournal();
       await backfillJournalOutcomes(fetchYahooSeries);
       const rawJournal = getJournal();
       const journal = independentDailyEntries(rawJournal.filter(entry => entry.modelVersion === MODEL_VERSION && entry.marketStatus === 'MARKET OPEN'));
@@ -507,6 +508,7 @@ const server = http.createServer(async (req, res) => {
 
   if (parsed.pathname === '/api/backtest') {
     try {
+      await loadJournal();
       await backfillJournalOutcomes(fetchYahooSeries);
       const summary = buildBacktestSummary();
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, max-age=0' });
