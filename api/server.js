@@ -10,7 +10,7 @@ const { buildConfidence } = require('../lib/scoring/confidence');
 const { buildStockVerdict, buildWatchlistSignal } = require('../lib/scoring/watchlist');
 const { getFeedQuality, buildSystemStatus } = require('../lib/health');
 const { loadJournal, logJournalEntry, getJournal } = require('../lib/journal/store');
-const { backfillJournalOutcomes, buildBacktestSummary } = require('../lib/journal/backtest');
+const { backfillJournalOutcomes, buildBacktestSummary, independentDailyEntries } = require('../lib/journal/backtest');
 const stockJournal = require('../lib/journal/stock-store');
 const stockBacktest = require('../lib/journal/stock-backtest');
 const { buildOptionChain } = require('../lib/options/tradier');
@@ -494,9 +494,10 @@ const server = http.createServer(async (req, res) => {
   if (parsed.pathname === '/api/journal') {
     try {
       await backfillJournalOutcomes(fetchYahooSeries);
-      const journal = getJournal();
+      const rawJournal = getJournal();
+      const journal = independentDailyEntries(rawJournal.filter(entry => entry.modelVersion === MODEL_VERSION && entry.marketStatus === 'MARKET OPEN'));
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, max-age=0' });
-      res.end(JSON.stringify({ journal, count: journal.length }));
+      res.end(JSON.stringify({ journal, count: journal.length, rawHistoricalCount:rawJournal.length, collectionMode:'one-per-model-date' }));
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
